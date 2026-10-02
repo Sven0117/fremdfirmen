@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fremdfirmen</title>
+<!-- Web-App (iPhone: Safari > Teilen > Zum Home-Bildschirm) -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#2e7d32">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fremdfirmen">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1d1f23; --muted: #6b7079; --line: #e2e4e8;
+    --accent: #2e7d32; --accent-soft: #e5f3e6; --we: #ffc000; --we-soft: #fff4d1; --danger: #c62828;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding-bottom: 30px; }
+  button { font: inherit; cursor: pointer; }
+  input { font: inherit; color: inherit; }
+
+  header { position: sticky; top: 0; z-index: 5; background: var(--accent); color: #fff; }
+  .hrow { display: flex; align-items: center; gap: 4px; padding: 6px 8px; }
+  .nav { background: none; border: 0; color: #fff; font-size: 26px; width: 44px; height: 44px; border-radius: 22px; flex: none; }
+  .nav:active { background: rgba(255,255,255,.15); }
+  .nav[hidden] { display: none; }
+  #titel { flex: 1; font-size: 19px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 6px; }
+  #untertitel { font-size: 12px; font-weight: 400; opacity: .85; display: block; }
+  .mrow { display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.14); padding: 0 8px; }
+  .mrow .nav { height: 38px; font-size: 24px; }
+  #monat { min-width: 170px; text-align: center; font-weight: 600; }
+
+  .card { background: var(--card); margin: 10px; border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .summe { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .summe .lbl { color: var(--muted); font-size: 13px; flex-basis: 100%; }
+  .summe .h { font-size: 22px; font-weight: 700; }
+  .summe .eur { font-size: 18px; font-weight: 600; color: var(--accent); margin-left: auto; }
+  .gesamt { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+
+  .satz { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .satz label { color: var(--muted); flex: 1; }
+  .satz input { width: 96px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; text-align: right; }
+  .aktionen { display: flex; gap: 8px; margin-top: 10px; }
+  .aktionen button { flex: 1; padding: 9px; border-radius: 9px; border: 1px solid var(--line); background: #fff; font-size: 14px; }
+  .aktionen .del { color: var(--danger); }
+
+  .liste { list-style: none; margin: 0 10px; padding: 0; background: var(--card); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .liste li { display: flex; align-items: center; gap: 10px; padding: 12px; border-top: 1px solid var(--line); min-height: 58px; }
+  .liste li:first-child { border-top: 0; }
+  .liste li.klick:active { background: var(--accent-soft); }
+  .liste .name { font-weight: 600; }
+  .liste .sub { font-size: 13px; color: var(--muted); }
+  .liste .links { flex: 1; min-width: 0; }
+  .liste .rechts { text-align: right; flex: none; }
+  .liste .rechts .h { font-weight: 600; }
+  .liste .rechts .eur { font-size: 13px; color: var(--accent); }
+  .liste .pfeil { color: #b0b4ba; font-size: 20px; flex: none; }
+  .leerhinweis { margin: 24px 20px; text-align: center; color: var(--muted); }
+  .add { display: block; width: calc(100% - 20px); margin: 12px 10px; padding: 14px; border: 1px dashed var(--accent); border-radius: 12px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 16px; }
+
+  /* Tagesliste */
+  #tage li { padding: 7px 10px; min-height: 0; gap: 8px; }
+  #tage li.frei { background: var(--we-soft); }
+  .tag { width: 40px; height: 40px; border-radius: 9px; background: #eef0f3; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; flex: none; }
+  .frei .tag { background: var(--we); }
+  .heute .tag { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tag b { font-size: 16px; line-height: 1; }
+  .tag small { font-size: 11px; color: #555; }
+  #tage li { align-items: flex-start; }
+  #tage .tag { margin-top: 1px; }
+  #tage input { padding: 8px 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; min-width: 0; font-size: 16px; }
+  .felder { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .z1, .z2 { display: flex; align-items: center; gap: 6px; }
+  #tage .std { width: 56px; text-align: center; font-size: 17px; font-weight: 600; flex: none; }
+  #tage .uhr { flex: 1; text-align: center; padding-left: 2px; padding-right: 2px; }
+  .strich { color: var(--muted); flex: none; }
+  .pause { font-size: 12px; color: var(--muted); white-space: nowrap; flex: none; min-width: 62px; text-align: right; }
+  .pause:empty { min-width: 0; }
+  .kopie { flex: none; padding: 7px 9px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft);
+    color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .kopie[hidden] { display: none; }
+  .kopietext { margin: 0 0 10px; padding: 10px; background: var(--accent-soft); border-radius: 9px; font-weight: 600; }
+  .sheet label.wahl { display: flex; align-items: center; gap: 12px; padding: 11px 4px; margin: 0; border-top: 1px solid var(--line);
+    font-size: 16px; color: var(--text); }
+  .sheet label.wahl:first-child { border-top: 0; }
+  .sheet label.wahl input { width: 22px; height: 22px; margin: 0; padding: 0; flex: none; accent-color: var(--accent); }
+  .wahl small { display: block; font-size: 12px; color: #b26a00; }
+  #kopieListe { margin-bottom: 10px; max-height: 50vh; overflow: auto; }
+  .pdfbtn.hell { background: #fff; color: var(--accent); border: 1px solid var(--accent); box-shadow: none; }
+  #tage .bem { flex: 1; font-size: 16px; }   /* unter 16px zoomt das iPhone beim Antippen ins Feld */
+  .satz input { font-size: 16px; }
+  html { -webkit-text-size-adjust: 100%; }
+  header { padding-top: env(safe-area-inset-top); }
+
+  /* Sheets */
+  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 10; display: flex; align-items: flex-end; }
+  .backdrop[hidden] { display: none; }
+  .sheet { background: var(--card); width: 100%; max-height: 92vh; overflow: auto; border-radius: 16px 16px 0 0;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
+  .sheet h2 { margin: 0 0 12px; font-size: 19px; display: flex; align-items: center; }
+  .sheet h2 .x { margin-left: auto; background: none; border: 0; font-size: 26px; color: var(--muted); width: 40px; height: 40px; }
+  .sheet label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .sheet label input { width: 100%; margin-top: 4px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 16px; }
+  .btnrow { display: flex; gap: 8px; margin-top: 6px; }
+  .btnrow button { flex: 1; padding: 13px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 15px; }
+  .btnrow .primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .sheet h3 { font-size: 15px; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .sheet h2 + h3 { border-top: 0; padding-top: 0; margin-top: 0; }
+  .nav.sync { font-size: 17px; font-weight: 700; width: 36px; height: 36px; background: rgba(255,255,255,.18); }
+  .nav.sync.fehler { background: #ffc000; color: #222; }
+  .nav.sync.laeuft { animation: dreh 1s linear infinite; }
+  @keyframes dreh { to { transform: rotate(360deg); } }
+
+  .pdfbtn { display: block; width: calc(100% - 20px); margin: 0 10px 10px; padding: 13px; border: 0; border-radius: 12px;
+    background: var(--accent); color: #fff; font-weight: 600; font-size: 16px; box-shadow: 0 2px 6px rgba(46,125,50,.3); }
+  .pdfbtn:active { filter: brightness(.9); }
+
+  /* PDF-Vorschau */
+  #vorschau { position: fixed; inset: 0; z-index: 20; background: #5a5f66; display: flex; flex-direction: column; }
+  #vorschau[hidden] { display: none; }
+  .vkopf { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; background: var(--accent); color: #fff; }
+  #vTitel { font-weight: 600; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vhint { font-size: 12px; opacity: .75; margin-left: auto; flex: none; }
+  .vkopf .x { background: none; border: 0; color: #fff; font-size: 28px; width: 44px; height: 44px; flex: none; }
+  .vbody { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 10px; }
+  .vbody img { display: block; width: 100%; height: auto; margin: 0 auto 10px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+  .vbody.zoom img { width: 280%; max-width: none; }
+  .vfuss { display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); }
+  .vfuss button { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font-size: 16px; }
+  .vfuss .primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+
+  #toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 16px;
+    border-radius: 20px; font-size: 14px; z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <button class="nav" id="zurueck" aria-label="Zurück" hidden>←</button>
+    <div id="titel"></div>
+    <button class="nav sync" id="syncBtn" aria-label="Dropbox-Abgleich" hidden></button>
+    <button class="nav" id="settingsBtn" aria-label="Einstellungen">⚙</button>
+  </div>
+  <div class="mrow">
+    <button class="nav" id="prev" aria-label="Vorheriger Monat">‹</button>
+    <div id="monat"></div>
+    <button class="nav" id="next" aria-label="Nächster Monat">›</button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<!-- Name/Satz eingeben -->
+<div class="backdrop" id="dialog" hidden>
+  <div class="sheet">
+    <h2><span id="dlgTitel"></span><button class="x" data-close aria-label="Schließen">×</button></h2>
+    <label><span id="dlgNameLbl">Name</span><input id="dlgName" autocomplete="off"></label>
+    <div class="btnrow">
+      <button data-close>Abbrechen</button>
+      <button class="primary" id="dlgOk">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tageseintrag auf andere übertragen -->
+<div class="backdrop" id="kopie" hidden>
+  <div class="sheet">
+    <h2>Auf andere übertragen<button class="x" data-close aria-label="Schließen">×</button></h2>
+    <p id="kopieText" class="kopietext"></p>
+    <div id="kopieListe"></div>
+    <div class="btnrow">
+      <button id="kopieAlle">Alle / Keine</button>
+      <button class="primary" id="kopieOk">Übertragen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Einstellungen -->
+<div class="backdrop" id="settings" hidden>
+  <div class="sheet">
+    <h2>Einstellungen<button class="x" data-close aria-label="Schließen">×</button></h2>
+
+    <h3>Arbeitszeit</h3>
+    <label>Standard-Beginn (wird beim Eintragen der Stunden vorgeschlagen)<input id="setBeginn" type="time"></label>
+    <p class="hint" style="margin-top:0">Das Ende rechnet die App aus: Stunden + Pause (über 6 Std. 30 min, über 9 Std. 45 min). Beginn und Ende lassen sich pro Tag ändern.</p>
+
+    <h3>Abgleich mit Dropbox</h3>
+    <div id="dbxAus">
+      <p class="hint" style="margin-top:0">Damit sehen du und dein Kollege dieselben Daten. Auf jedem Handy einmal verbinden.</p>
+      <label id="dbxKeyWrap">App-Schlüssel (von der Dropbox-Entwicklerseite)<input id="dbxKey" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <div class="btnrow"><button class="primary" id="dbxStart">1. Bei Dropbox anmelden</button></div>
+      <label style="margin-top:12px">2. Code von Dropbox hier einfügen<input id="dbxCode" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <div class="btnrow"><button class="primary" id="dbxVerbinden">3. Verbinden</button></div>
+    </div>
+    <div id="dbxAn">
+      <p id="dbxStatus" style="margin:0 0 8px"></p>
+      <div class="btnrow"><button id="dbxJetzt">Jetzt abgleichen</button><button id="dbxTrennen">Trennen</button></div>
+    </div>
+
+    <h3>Backup</h3>
+    <div class="btnrow">
+      <button id="backupBtn">Backup teilen</button>
+      <button id="restoreBtn">Backup laden</button>
+    </div>
+    <input type="file" id="restoreFile" accept=".json,application/json,text/plain,*/*" hidden>
+    <p class="hint">Alle Daten liegen nur auf diesem Handy. „Backup teilen“ schickt eine Sicherungsdatei z. B. an dich selbst per Mail.</p>
+  </div>
+</div>
+
+<!-- PDF-Vorschau -->
+<div id="vorschau" hidden>
+  <div class="vkopf">
+    <span id="vTitel">Vorschau</span>
+    <span class="vhint">Tippen = Zoom</span>
+    <button class="x" data-vclose aria-label="Schließen">×</button>
+  </div>
+  <div class="vbody" id="vBody"></div>
+  <div class="vfuss">
+    <button data-vclose>Zurück</button>
+    <button class="primary" id="vSenden">PDF senden</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
