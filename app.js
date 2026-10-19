@@ -17,14 +17,15 @@ const Store = {
   },
 };
 
-// data.firmen[] = { id, name, t, del?, personen[] = { id, name, t, del?, monate: { 'JJJJ-MM': { tage: { 1: { h, von, bis, b, t } } } } } }
-// h = Arbeitsstunden, von/bis = Anwesenheit 'HH:MM' (Pause = Differenz), b = Ort/Bemerkung
+// data.firmen[] = { id, name, t, del?, personen[] = { id, name, t, del?, monate: { 'JJJJ-MM': { tage: { 1: { h, von, bis, p, b, t } } } } } }
+// h = Arbeitsstunden, von/bis = Anwesenheit 'HH:MM' (Pause = Differenz), p = von Hand gewählte Pause in Minuten, b = Ort/Bemerkung
 // t = Zeitstempel der letzten Änderung (für den Dropbox-Abgleich: der neuere Eintrag gewinnt)
 // del = gelöscht (bleibt als Markierung stehen, damit die Löschung auch beim Kollegen ankommt)
 const gespeichert = Store.load() || {};
 let data = { firmen: gespeichert.firmen || [] };
 // lokal = bleibt nur auf diesem Handy (Dropbox-Zugang, Abgleich-Stand) und wird nie hochgeladen
-let lokal = Object.assign({ key: '', pkce: '', dbx: null, rev: null, dirty: false, letzter: 0, beginn: '06:00' }, gespeichert.lokal || {});
+// pauseSa = Pause samstags in Minuten ('' = wie werktags nach Arbeitszeit)
+let lokal = Object.assign({ key: '', pkce: '', dbx: null, rev: null, dirty: false, letzter: 0, beginn: '06:00', pauseSa: 15 }, gespeichert.lokal || {});
 let aenderungen = 0;
 
 // Ältere Daten nachrüsten: Zeitstempel ergänzen, Stundensätze entfernen (gibt es nicht mehr),
@@ -108,8 +109,16 @@ const zuMin = (uhr) => { const m = /^(\d{1,2}):(\d{2})$/.exec(uhr || ''); return
 const zuUhr = (min) => { min = ((Math.round(min) % 1440) + 1440) % 1440; return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); };
 const hText = (h) => String(Math.round(h * 100) / 100).replace('.', ',');
 const spanne = (von, bis) => (zuMin(bis) - zuMin(von) + 1440) % 1440;   // Anwesenheit in Minuten (auch über Mitternacht)
-// Anwesenheit (Minuten) -> Arbeitsstunden, Pause abgezogen
-function stundenAusSpanne(min) {
+// Feste Pause eines Tages in Minuten: von Hand gewählt, sonst samstags laut Einstellung; null = nach Arbeitszeit
+function festePause(t, datum) {
+  if (t.p != null && t.p !== '') return +t.p;
+  if (datum && lokal.pauseSa !== '' && lokal.pauseSa != null && new Date(datum.y, datum.m, datum.d).getDay() === 6) return +lokal.pauseSa;
+  return null;
+}
+const pauseTag = (t, h, datum) => { const p = festePause(t, datum); return p != null ? p : pauseFuer(h); };
+// Anwesenheit (Minuten) -> Arbeitsstunden, Pause abgezogen (feste Pause oder Regel nach Arbeitszeit)
+function stundenAusSpanne(min, fest) {
+  if (fest != null) return Math.max(0, min - fest) / 60;
   if (min - 45 > 540) return (min - 45) / 60;
   if (min - 30 > 540) return 9;
   if (min - 30 > 360) return (min - 30) / 60;
@@ -125,35 +134,49 @@ function pauseVon(t) {
 const pauseText = (min) => (min == null ? '' : `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`);
 const hatEintrag = (t) => !!t && (zahl(t.h) > 0 || !!t.von || !!t.bis);
 
-// Ein Feld eines Tages ändern; Stunden, Beginn und Ende hängen zusammen
-function setzeTag(t, feld, wert) {
+// Ein Feld eines Tages ändern; Stunden, Beginn, Ende und Pause hängen zusammen. datum = { y, m, d } (für Samstag)
+function setzeTag(t, feld, wert, datum) {
   if (feld === 'b') {
     if (wert) t.b = wert; else delete t.b;
   } else if (feld === 'h') {
     const h = zahl(wert);
-    if (wert) t.h = wert; else { delete t.h; delete t.von; delete t.bis; }
+    if (wert) t.h = wert; else { delete t.h; delete t.von; delete t.bis; delete t.p; }
     if (h > 0) {
       const von = zuMin(t.von) != null ? zuMin(t.von) : zuMin(lokal.beginn);
       t.von = zuUhr(von);
-      t.bis = zuUhr(von + h * 60 + pauseFuer(h));
+      t.bis = zuUhr(von + h * 60 + pauseTag(t, h, datum));
     }
   } else if (feld === 'von') {
     if (!wert) { delete t.von; }
     else {
       t.von = wert;
       const h = zahl(t.h);
-      if (h > 0) t.bis = zuUhr(zuMin(wert) + h * 60 + pauseFuer(h));          // Stunden bleiben, Ende wandert mit
-      else if (zuMin(t.bis) != null) t.h = hText(stundenAusSpanne(spanne(wert, t.bis)));
+      if (h > 0) t.bis = zuUhr(zuMin(wert) + h * 60 + pauseTag(t, h, datum));   // Stunden bleiben, Ende wandert mit
+      else if (zuMin(t.bis) != null) t.h = hText(stundenAusSpanne(spanne(wert, t.bis), festePause(t, datum)));
     }
   } else if (feld === 'bis') {
     if (!wert) { delete t.bis; }
     else {
       t.bis = wert;
       if (zuMin(t.von) == null) t.von = lokal.beginn;
-      t.h = hText(stundenAusSpanne(spanne(t.von, wert)));                     // Ende geändert -> Stunden neu
+      t.h = hText(stundenAusSpanne(spanne(t.von, wert), festePause(t, datum)));   // Ende geändert -> Stunden neu
     }
+  } else if (feld === 'p') {
+    t.p = Math.max(0, Math.round(zahl(wert)));
+    const h = zahl(t.h);
+    if (h > 0 && zuMin(t.von) != null) t.bis = zuUhr(zuMin(t.von) + h * 60 + t.p);   // Pause geändert: Stunden bleiben, Ende wandert
   }
   t.t = Date.now();
+}
+
+// Pause-Auswahl einer Tageszeile (nur wenn Stunden, Beginn und Ende da sind)
+function pauseHtml(t) {
+  const ps = pauseVon(t);
+  if (ps == null) return '';
+  const werte = [0, 15, 30, 45, 60];
+  if (!werte.includes(ps)) { werte.push(ps); werte.sort((a, b) => a - b); }
+  return `<select class="pause" data-f="p" aria-label="Pause">` +
+    werte.map((w) => `<option value="${w}"${w === ps ? ' selected' : ''}>Pause ${pauseText(w)}</option>`).join('') + '</select>';
 }
 
 // ---------- Rechnen ----------
@@ -266,7 +289,6 @@ function render() {
     const t = mo.tage[d] || {};
     const cls = [frei(cur.y, cur.m, d) ? 'frei' : '',
       cur.y === heute.getFullYear() && cur.m === heute.getMonth() && d === heute.getDate() ? 'heute' : ''].join(' ').trim();
-    const ps = pauseVon(t);
     html += `<li class="${cls}" data-tag="${d}"><div class="tag"><b>${d}</b><small>${WT[new Date(cur.y, cur.m, d).getDay()]}</small></div>` +
       `<div class="felder"><div class="z1">` +
       `<input class="std" inputmode="decimal" data-f="h" value="${esc(t.h || '')}" placeholder="Std" autocomplete="off">` +
@@ -274,7 +296,7 @@ function render() {
       `<span class="strich">–</span>` +
       `<input class="uhr" type="time" data-f="bis" value="${esc(t.bis || '')}" aria-label="Ende"></div>` +
       `<div class="z2"><input class="bem" data-f="b" value="${esc(t.b || '')}" placeholder="Ort / Bemerkung" autocomplete="off">` +
-      `<span class="pause">${ps ? 'Pause ' + pauseText(ps) : ''}</span>` +
+      `<span class="pausebox">${pauseHtml(t)}</span>` +
       `<button class="kopie" data-kopie${hatEintrag(t) ? '' : ' hidden'} aria-label="Auf andere Personen übertragen">Auf alle</button></div></div></li>`;
   }
   html += '</ul>' +
@@ -287,11 +309,10 @@ function render() {
     const d = li.dataset.tag;
     const m2 = x.monate[k] || (x.monate[k] = { tage: {} });
     const t = m2.tage[d] || (m2.tage[d] = {});   // leerer Eintrag bleibt mit Zeitstempel stehen (Löschen wird so abgeglichen)
-    setzeTag(t, feld, e.target.value.trim());
+    setzeTag(t, feld, e.target.value.trim(), { y: cur.y, m: cur.m, d: +d });
     // die anderen Felder der Zeile nachziehen (nicht das, in dem gerade getippt wird)
     li.querySelectorAll('input').forEach((inp) => { if (inp !== e.target && inp.dataset.f !== 'b') inp.value = t[inp.dataset.f] || ''; });
-    const ps2 = pauseVon(t);
-    li.querySelector('.pause').textContent = ps2 ? 'Pause ' + pauseText(ps2) : '';
+    li.querySelector('.pausebox').innerHTML = pauseHtml(t);
     li.querySelector('[data-kopie]').hidden = !hatEintrag(t);
     save();
     aktualisiereSummen();
@@ -369,7 +390,7 @@ function kopieOk() {
     const x = f.personen.find((y) => y.id === cb.dataset.id && !y.del);
     if (!x) return;
     const neu = { t: Date.now() };
-    ['h', 'von', 'bis', 'b'].forEach((feld) => { if (t[feld]) neu[feld] = t[feld]; });
+    ['h', 'von', 'bis', 'p', 'b'].forEach((feld) => { if (t[feld] != null && t[feld] !== '') neu[feld] = t[feld]; });
     (x.monate[k] || (x.monate[k] = { tage: {} })).tage[kopieTag] = neu;
     n++;
   });
@@ -582,7 +603,8 @@ function seitenAnwesenheit(f, y, m) {
     z.txt(alle ? 'Alle Firmen' : f.name, L + 52, 84, { size: 13, maxW: 380 });
     z.txt('Monat:', 500, 84, { size: 13, bold: true });
     z.txt(`${MONATE[m]} ${y}`, 552, 84, { size: 13 });
-    z.txt('Pause automatisch: über 6 Std. 30 min, über 9 Std. 45 min – sofern nicht anders eingetragen.', L, 108, { size: 9, farbe: '#555' });
+    const sa = lokal.pauseSa !== '' && lokal.pauseSa != null ? `, samstags ${lokal.pauseSa} min` : '';
+    z.txt(`Pause automatisch: über 6 Std. 30 min, über 9 Std. 45 min${sa} – sofern nicht anders eingetragen.`, L, 108, { size: 9, farbe: '#555' });
 
     const n = teil.length + (letzte ? 1 : 0), B = T + KH + n * RH;
     z.fill(L, T, R, T + KH, '#D9D9D9');
@@ -1068,6 +1090,8 @@ function init() {
   };
   $('setBeginn').value = lokal.beginn;
   $('setBeginn').onchange = (e) => { if (zuMin(e.target.value) != null) { lokal.beginn = e.target.value; saveLokal(); } };
+  $('setPauseSa').value = lokal.pauseSa === '' || lokal.pauseSa == null ? '' : String(lokal.pauseSa);
+  $('setPauseSa').onchange = (e) => { lokal.pauseSa = e.target.value === '' ? '' : +e.target.value; saveLokal(); };
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => (b.closest('.backdrop').hidden = true)));
   document.querySelectorAll('.backdrop').forEach((bd) => bd.addEventListener('click', (e) => { if (e.target === bd) bd.hidden = true; }));
   document.querySelectorAll('[data-vclose]').forEach((b) => (b.onclick = schliesseVorschau));

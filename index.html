@@ -83,8 +83,11 @@
   #tage .std { width: 56px; text-align: center; font-size: 17px; font-weight: 600; flex: none; }
   #tage .uhr { flex: 1; text-align: center; padding-left: 2px; padding-right: 2px; }
   .strich { color: var(--muted); flex: none; }
-  .pause { font-size: 12px; color: var(--muted); white-space: nowrap; flex: none; min-width: 62px; text-align: right; }
-  .pause:empty { min-width: 0; }
+  .pausebox { flex: none; }
+  .pausebox:empty { display: none; }
+  /* 16px, sonst zoomt das iPhone beim Antippen */
+  select.pause { font: inherit; font-size: 16px; color: var(--muted); background: #fff; border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 4px; max-width: 118px; }
   .kopie { flex: none; padding: 7px 9px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft);
     color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap; }
   .kopie[hidden] { display: none; }
@@ -109,7 +112,7 @@
   .sheet h2 { margin: 0 0 12px; font-size: 19px; display: flex; align-items: center; }
   .sheet h2 .x { margin-left: auto; background: none; border: 0; font-size: 26px; color: var(--muted); width: 40px; height: 40px; }
   .sheet label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
-  .sheet label input { width: 100%; margin-top: 4px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 16px; }
+  .sheet label input, .sheet label select { width: 100%; margin-top: 4px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 16px; background: #fff; color: var(--text); }
   .btnrow { display: flex; gap: 8px; margin-top: 6px; }
   .btnrow button { flex: 1; padding: 13px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 15px; }
   .btnrow .primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
@@ -193,7 +196,14 @@
 
     <h3>Arbeitszeit</h3>
     <label>Standard-Beginn (wird beim Eintragen der Stunden vorgeschlagen)<input id="setBeginn" type="time"></label>
-    <p class="hint" style="margin-top:0">Das Ende rechnet die App aus: Stunden + Pause (über 6 Std. 30 min, über 9 Std. 45 min). Beginn und Ende lassen sich pro Tag ändern.</p>
+    <label>Pause samstags<select id="setPauseSa">
+      <option value="">wie werktags (nach Arbeitszeit)</option>
+      <option value="0">keine Pause</option>
+      <option value="15">15 min</option>
+      <option value="30">30 min</option>
+      <option value="45">45 min</option>
+    </select></label>
+    <p class="hint" style="margin-top:0">Das Ende rechnet die App aus: Stunden + Pause (werktags über 6 Std. 30 min, über 9 Std. 45 min). Beginn, Ende und Pause lassen sich pro Tag ändern: einfach bei „Pause“ in der Tageszeile eine andere Zeit wählen (Stunden bleiben, Ende rückt). Ist das Ende bekannt: erst die Pause wählen, dann das Ende eintragen – dann rechnen sich die Stunden neu.</p>
 
     <h3>Abgleich mit Dropbox</h3>
     <div id="dbxAus">
