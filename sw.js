@@ -1,7 +1,7 @@
 // Offline-Betrieb der Web-App (iPhone). Online wird immer die neueste Version geladen,
 // ohne Netz kommt die zuletzt gespeicherte aus dem Cache.
-const CACHE = 'fremdfirmen-v7';
-const DATEIEN = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'fremdfirmen-v8';
+const DATEIEN = ['./', 'index.html', 'app.js', 'logo-breit.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(DATEIEN.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));

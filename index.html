@@ -8,39 +8,49 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<meta name="theme-color" content="#2e7d32">
+<meta name="theme-color" content="#ffffff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Fremdfirmen">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="7">
+<meta name="app-version" content="8">
 <style>
+  /* Farben wie die Jansen-PC-Programme (Stillstandsplaner, Montagefortschritt, Aufmaßliste) */
   :root {
-    --bg: #f4f5f7; --card: #fff; --text: #1d1f23; --muted: #6b7079; --line: #e2e4e8;
-    --accent: #2e7d32; --accent-soft: #e5f3e6; --we: #ffc000; --we-soft: #fff4d1; --danger: #c62828;
+    --bg: #eef0f3; --card: #fff; --text: #1f2937; --head: #1d1d1b; --muted: #6b7280; --line: #cfd4dc; --line2: #e6e9ee;
+    --accent: #00A0A8; --accent-d: #00838a; --accent-soft: #e3f5f6; --we: #f2b705; --we-soft: #fff7e0; --danger: #dc2626; --ok: #15803d;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    font: 16px/1.35 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
   body { padding-bottom: 30px; }
   button { font: inherit; cursor: pointer; }
   input { font: inherit; color: inherit; }
 
-  header { position: sticky; top: 0; z-index: 5; background: var(--accent); color: #fff; }
-  .hrow { display: flex; align-items: center; gap: 4px; padding: 6px 8px; }
-  .nav { background: none; border: 0; color: #fff; font-size: 26px; width: 44px; height: 44px; border-radius: 22px; flex: none; }
-  .nav:active { background: rgba(255,255,255,.15); }
+  /* Kopf: weiß mit Logo, Petrol-Linie; darunter die Monatsleiste */
+  header { position: sticky; top: 0; z-index: 5; background: #fff; color: var(--text); border-bottom: 3px solid var(--accent);
+    box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  .hrow { display: flex; align-items: center; gap: 8px; padding: 7px 10px 6px; min-height: 50px; }
+  .jlogo { height: 30px; display: block; flex: none; }
+  .jlogo[hidden] { display: none; }
+  .nav { background: none; border: 0; color: var(--accent); font-size: 26px; font-weight: 700; width: 40px; height: 40px; border-radius: 8px; flex: none; }
+  .nav:active { background: var(--accent-soft); }
   .nav[hidden] { display: none; }
-  #titel { flex: 1; font-size: 19px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 6px; }
-  #untertitel { font-size: 12px; font-weight: 400; opacity: .85; display: block; }
-  .mrow { display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.14); padding: 0 8px; }
-  .mrow .nav { height: 38px; font-size: 24px; }
-  #monat { min-width: 170px; text-align: center; font-weight: 600; }
+  #titel { flex: 1; font-size: 17px; font-weight: 700; color: var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #titel b { color: var(--accent); }
+  #untertitel { font-size: 12px; font-weight: 400; color: var(--muted); display: block; }
+  .knopf { width: 38px; height: 38px; border: 1px solid var(--line); background: #fff; border-radius: 8px; font-size: 19px;
+    color: var(--text); display: flex; align-items: center; justify-content: center; flex: none; }
+  .knopf[hidden] { display: none; }
+  .knopf:active { border-color: var(--accent); background: var(--accent-soft); }
+  .mrow { display: flex; align-items: center; border-top: 1px solid var(--line2); }
+  .mrow .nav { width: 52px; height: 42px; border-radius: 0; }
+  #monat { flex: 1; text-align: center; font-weight: 700; font-size: 17px; color: var(--head); }
 
-  .card { background: var(--card); margin: 10px; border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
-  .summe { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .summe .lbl { color: var(--muted); font-size: 13px; flex-basis: 100%; }
-  .summe .h { font-size: 22px; font-weight: 700; }
+  .card { background: var(--card); margin: 10px; border-radius: 10px; padding: 12px; border: 1px solid var(--line2); border-top: 4px solid var(--accent); }
+  .summe { display: flex; align-items: baseline; gap: 10px; }
+  .summe .lbl { color: var(--muted); font-size: 13px; flex: 1; }
+  .summe .h { font-size: 26px; font-weight: 700; color: var(--head); }
   .summe .eur { font-size: 18px; font-weight: 600; color: var(--accent); margin-left: auto; }
   .gesamt { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
 
@@ -51,31 +61,44 @@
   .aktionen button { flex: 1; padding: 9px; border-radius: 9px; border: 1px solid var(--line); background: #fff; font-size: 14px; }
   .aktionen .del { color: var(--danger); }
 
-  .liste { list-style: none; margin: 0 10px; padding: 0; background: var(--card); border-radius: 12px; overflow: hidden;
-    box-shadow: 0 1px 2px rgba(0,0,0,.06); }
-  .liste li { display: flex; align-items: center; gap: 10px; padding: 12px; border-top: 1px solid var(--line); min-height: 58px; }
+  .liste { list-style: none; margin: 0 10px; padding: 0; background: var(--card); border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line2); }
+  .liste li { display: flex; align-items: center; gap: 10px; padding: 12px; border-top: 1px solid var(--line2); min-height: 58px; }
   .liste li:first-child { border-top: 0; }
+  .liste li.klick { cursor: pointer; }
   .liste li.klick:active { background: var(--accent-soft); }
-  .liste .name { font-weight: 600; }
+  .liste .name { font-weight: 600; color: var(--head); }
   .liste .sub { font-size: 13px; color: var(--muted); }
   .liste .links { flex: 1; min-width: 0; }
   .liste .rechts { text-align: right; flex: none; }
-  .liste .rechts .h { font-weight: 600; }
-  .liste .rechts .eur { font-size: 13px; color: var(--accent); }
-  .liste .pfeil { color: #b0b4ba; font-size: 20px; flex: none; }
+  .liste .rechts .h { font-weight: 700; color: var(--head); }
+  .liste .pfeil { color: #b0b6bf; font-size: 20px; flex: none; }
+  /* Firmen als Karten (ganze Karte antippen = öffnen) */
+  .h2 { font-size: 17px; font-weight: 700; color: var(--head); margin: 14px 12px 0; }
+  .firma { cursor: pointer; position: relative; padding-right: 36px; }
+  .firma::after { content: '›'; position: absolute; right: 13px; top: 50%; transform: translateY(-50%); font-size: 26px; color: #b0b6bf; }
+  .firma:active { background: var(--accent-soft); }
+  .firma .name { font-size: 16px; font-weight: 700; color: var(--head); }
+  .firma .sub { font-size: 12px; color: var(--muted); margin: 1px 0 6px; }
+  .firma .zahlen { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); }
+  .firma .zahlen b { font-size: 21px; color: var(--head); }
   .leerhinweis { margin: 24px 20px; text-align: center; color: var(--muted); }
-  .add { display: block; width: calc(100% - 20px); margin: 12px 10px; padding: 14px; border: 1px dashed var(--accent); border-radius: 12px;
-    background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 16px; }
+  .add { display: block; width: calc(100% - 20px); margin: 12px 10px; padding: 14px; border: 2px dashed var(--line); border-radius: 10px;
+    background: #fff; color: var(--accent-d); font-weight: 600; font-size: 16px; }
+  .add:active { border-color: var(--accent); background: var(--accent-soft); }
 
   /* Tagesliste */
   #tage li { padding: 7px 10px; min-height: 0; gap: 8px; }
   #tage li.frei { background: var(--we-soft); }
-  .tag { width: 40px; height: 40px; border-radius: 9px; background: #eef0f3; display: flex; flex-direction: column;
+  #tage li.heute { background: var(--accent-soft); box-shadow: inset 4px 0 0 var(--accent); }
+  .tag { width: 40px; height: 40px; border-radius: 8px; background: #f3f4f6; display: flex; flex-direction: column;
     align-items: center; justify-content: center; flex: none; }
   .frei .tag { background: var(--we); }
-  .heute .tag { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .tag b { font-size: 16px; line-height: 1; }
-  .tag small { font-size: 11px; color: #555; }
+  .heute .tag { background: var(--accent); }
+  .heute .tag b, .heute .tag small { color: #fff; }
+  .tag b { font-size: 16px; line-height: 1; color: var(--head); }
+  .tag small { font-size: 11px; color: var(--muted); }
+  .frei .tag small { color: #3b2a00; }
   #tage li { align-items: flex-start; }
   #tage .tag { margin-top: 1px; }
   #tage input { padding: 8px 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; min-width: 0; font-size: 16px; }
@@ -122,13 +145,18 @@
   .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
   .sheet h3 { font-size: 15px; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); }
   .sheet h2 + h3 { border-top: 0; padding-top: 0; margin-top: 0; }
-  .nav.sync { font-size: 17px; font-weight: 700; width: 36px; height: 36px; background: rgba(255,255,255,.18); }
-  .nav.sync.fehler { background: #ffc000; color: #222; }
-  .nav.sync.laeuft { animation: dreh 1s linear infinite; }
-  @keyframes dreh { to { transform: rotate(360deg); } }
+  /* Dropbox-Anzeige im Kopf (Text „Dropbox“ nur in der Übersicht, sonst wird es eng) */
+  .sync { font-size: 12px; border-radius: 12px; padding: 4px 10px; border: 1px solid #86efac; background: #f0fdf4; color: var(--ok);
+    white-space: nowrap; flex: none; font-weight: 600; }
+  .sync[hidden] { display: none; }
+  .start .sync.ok::after { content: ' Dropbox'; }
+  .sync.laeuft { border-color: var(--line); background: #fff; color: var(--muted); }
+  .sync.fehler { color: #fff; background: var(--danger); border-color: var(--danger); }
+  .start .sync.fehler::after { content: ' Dropbox'; }
 
-  .pdfbtn { display: block; width: calc(100% - 20px); margin: 0 10px 10px; padding: 13px; border: 0; border-radius: 12px;
-    background: var(--accent); color: #fff; font-weight: 600; font-size: 16px; box-shadow: 0 2px 6px rgba(46,125,50,.3); }
+  .pdfbtn { display: block; width: calc(100% - 20px); margin: 0 10px 10px; padding: 13px; border: 0; border-radius: 8px;
+    background: var(--accent); color: #fff; font-weight: 600; font-size: 16px; box-shadow: 0 2px 6px rgba(0,160,168,.3); }
+  .pdfbtn::before { content: '📄 '; }
   .pdfbtn:active { filter: brightness(.9); }
 
   /* PDF-Vorschau */
@@ -148,15 +176,22 @@
   #toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 16px;
     border-radius: 20px; font-size: 14px; z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
+
+  /* PC/Tablet quer: nicht über die ganze Breite ziehen */
+  @media (min-width: 760px) {
+    body { max-width: 720px; margin: 0 auto; }
+    .sheet { max-width: 720px; margin: 0 auto; }
+  }
 </style>
 </head>
 <body>
 <header>
   <div class="hrow">
-    <button class="nav" id="zurueck" aria-label="Zurück" hidden>←</button>
+    <button class="nav" id="zurueck" aria-label="Zurück" hidden>‹</button>
+    <img class="jlogo" id="logo" alt="Jansen">
     <div id="titel"></div>
-    <button class="nav sync" id="syncBtn" aria-label="Dropbox-Abgleich" hidden></button>
-    <button class="nav" id="settingsBtn" aria-label="Einstellungen">⚙</button>
+    <button class="sync" id="syncBtn" aria-label="Dropbox-Abgleich" hidden></button>
+    <button class="knopf" id="settingsBtn" aria-label="Einstellungen">⚙</button>
   </div>
   <div class="mrow">
     <button class="nav" id="prev" aria-label="Vorheriger Monat">‹</button>
@@ -248,6 +283,7 @@
 </div>
 
 <div id="toast"></div>
+<script src="logo-breit.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

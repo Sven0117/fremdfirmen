@@ -2,7 +2,7 @@
 
 // Seite (index.html) und Programm (app.js) müssen zusammenpassen. Nach einem Update kann der Browser kurz eine
 // alte Seite mit neuem Programm mischen – dann einmal neu laden. Bei jedem Update hier, in index.html und sw.js hochzählen.
-const APP_VERSION = '7';
+const APP_VERSION = '8';
 if (/^https?:$/.test(location.protocol)) {
   const seite = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (seite !== APP_VERSION && sessionStorage.getItem('neuGeladen') !== APP_VERSION) {
@@ -219,21 +219,23 @@ function render() {
   $('monat').textContent = mText;
   $('zurueck').hidden = ansicht.name === 'firmen';
   $('settingsBtn').hidden = ansicht.name !== 'firmen';
+  $('logo').hidden = ansicht.name !== 'firmen';                     // Logo nur auf der Startseite, sonst Zurück + Name
+  document.body.classList.toggle('start', ansicht.name === 'firmen');
   const main = $('main');
   const k = key();
 
   if (ansicht.name === 'firmen') {
-    $('titel').textContent = 'Fremdfirmen';
+    $('titel').innerHTML = 'Fremd<b>firmen</b>';
     const firmen = aktFirmen();
     let html = summenKarte(`Alle Firmen – ${mText}`, firmen.reduce((a, f) => a + summeFirma(f, k), 0));
-    html += `<button class="pdfbtn" id="pdfAlle">PDF Anwesenheitsliste (alle Firmen)</button>`;
+    html += `<button class="pdfbtn" id="pdfAlle">Anwesenheitsliste (alle Firmen)</button>`;
     if (firmen.length) {
-      html += '<ul class="liste">' + firmen.sort(nachName).map((f) => {
+      html += '<div class="h2">Firmen</div>' + firmen.sort(nachName).map((f) => {
         const n = leute(f).length;
-        return `<li class="klick" data-firma="${f.id}"><div class="links"><div class="name">${esc(f.name)}</div>` +
-          `<div class="sub">${n} ${n === 1 ? 'Person' : 'Personen'}</div></div>` +
-          `<div class="rechts"><div class="h">${fmtH(summeFirma(f, k))}</div></div><span class="pfeil">›</span></li>`;
-      }).join('') + '</ul>';
+        return `<div class="card firma" data-firma="${f.id}"><div class="name">${esc(f.name)}</div>` +
+          `<div class="sub">${n} ${n === 1 ? 'Person' : 'Personen'}</div>` +
+          `<div class="zahlen"><span>${MONATE[cur.m]}</span><b>${fmtH(summeFirma(f, k))}</b></div></div>`;
+      }).join('');
     } else {
       html += '<p class="leerhinweis">Noch keine Fremdfirma angelegt.</p>';
     }
@@ -253,8 +255,8 @@ function render() {
   if (ansicht.name === 'firma') {
     $('titel').textContent = f.name;
     let html = summenKarte(`${f.name} – ${mText}`, summeFirma(f, k), summeFirma(f, null));
-    html += `<button class="pdfbtn" id="pdfListe">PDF Anwesenheitsliste (wer, wann, wo)</button>` +
-      `<button class="pdfbtn hell" id="pdfBtn">PDF Monatsübersicht (Stunden)</button>`;
+    html += `<button class="pdfbtn" id="pdfListe">Anwesenheitsliste (wer, wann, wo)</button>` +
+      `<button class="pdfbtn hell" id="pdfBtn">Monatsübersicht (Stunden)</button>`;
     if (leute(f).length) {
       html += '<ul class="liste">' + leute(f).sort(nachName).map((p) => {
         const tg = tageMonat(p, k);
@@ -293,7 +295,7 @@ function render() {
   if (!p) return gehe({ name: 'firma', firma: f.id });
   $('titel').innerHTML = `${esc(p.name)}<span id="untertitel">${esc(f.name)}</span>`;
   let html = `<div id="sumBox">${summenKarte(`${p.name} – ${mText}`, summePerson(p, k), summePerson(p, null))}</div>` +
-    `<button class="pdfbtn" id="pdfBtn">PDF Stundennachweis</button>`;
+    `<button class="pdfbtn" id="pdfBtn">Stundennachweis</button>`;
   const mo = p.monate[k] || { tage: {} };
   const n = tageImMonat(cur.y, cur.m);
   html += '<ul class="liste" id="tage">';
@@ -1083,7 +1085,7 @@ function setzeStatus(s) {
   const b = $('syncBtn');
   b.hidden = s === 'aus';
   b.textContent = { ok: '✓', laeuft: '↻', fehler: '!' }[s] || '';
-  b.className = 'nav sync ' + s;
+  b.className = 'sync ' + s;
   if (!$('settings').hidden) zeigeDropbox();
 }
 function zeigeDropbox() {
@@ -1099,6 +1101,7 @@ window.onAppResume = () => planeSync(300);
 
 // ---------- Ereignisse ----------
 function init() {
+  $('logo').src = window.LOGO_BREIT || '';   // Jansen-Logo im Kopf
   stempeln(data.firmen);
   $('prev').onclick = () => { cur.m--; if (cur.m < 0) { cur.m = 11; cur.y--; } render(); };
   $('next').onclick = () => { cur.m++; if (cur.m > 11) { cur.m = 0; cur.y++; } render(); };
