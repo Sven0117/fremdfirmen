@@ -1,6 +1,6 @@
 // Offline-Betrieb der Web-App (iPhone). Online wird immer die neueste Version geladen,
 // ohne Netz kommt die zuletzt gespeicherte aus dem Cache.
-const CACHE = 'fremdfirmen-v5';
+const CACHE = 'fremdfirmen-v6';
 const DATEIEN = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {

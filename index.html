@@ -97,7 +97,9 @@
   .sheet label.wahl:first-child { border-top: 0; }
   .sheet label.wahl input { width: 22px; height: 22px; margin: 0; padding: 0; flex: none; accent-color: var(--accent); }
   .wahl small { display: block; font-size: 12px; color: #b26a00; }
-  #kopieListe { margin-bottom: 10px; max-height: 50vh; overflow: auto; }
+  #kopieListe { margin-bottom: 10px; max-height: 45vh; overflow: auto; }
+  #kopie [hidden] { display: none !important; }
+  #kopie label.tagebis { margin: 4px 0 6px; }
   .pdfbtn.hell { background: #fff; color: var(--accent); border: 1px solid var(--accent); box-shadow: none; }
   #tage .bem { flex: 1; font-size: 16px; }   /* unter 16px zoomt das iPhone beim Antippen ins Feld */
   .satz input { font-size: 16px; }
@@ -179,9 +181,11 @@
 <!-- Tageseintrag auf andere übertragen -->
 <div class="backdrop" id="kopie" hidden>
   <div class="sheet">
-    <h2>Auf andere übertragen<button class="x" data-close aria-label="Schließen">×</button></h2>
+    <h2>Übertragen<button class="x" data-close aria-label="Schließen">×</button></h2>
     <p id="kopieText" class="kopietext"></p>
     <div id="kopieListe"></div>
+    <label id="kopieBisWrap" class="tagebis">Auch auf die folgenden Tage (alle oben angehakten und diese Person)<select id="kopieBis"></select></label>
+    <label class="wahl" id="kopieWeWrap"><input type="checkbox" id="kopieWe"><span>Samstag, Sonntag und Feiertage auslassen</span></label>
     <div class="btnrow">
       <button id="kopieAlle">Alle / Keine</button>
       <button class="primary" id="kopieOk">Übertragen</button>

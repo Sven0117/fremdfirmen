@@ -133,6 +133,8 @@ function pauseVon(t) {
 }
 const pauseText = (min) => (min == null ? '' : `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`);
 const hatEintrag = (t) => !!t && (zahl(t.h) > 0 || !!t.von || !!t.bis);
+// übertragbar ist auch ein Tag nur mit Bemerkung (z. B. „Urlaub“)
+const kopierbar = (t) => hatEintrag(t) || !!(t && t.b);
 
 // Ein Feld eines Tages ändern; Stunden, Beginn, Ende und Pause hängen zusammen. datum = { y, m, d } (für Samstag)
 function setzeTag(t, feld, wert, datum) {
@@ -297,7 +299,7 @@ function render() {
       `<input class="uhr" type="time" data-f="bis" value="${esc(t.bis || '')}" aria-label="Ende"></div>` +
       `<div class="z2"><input class="bem" data-f="b" value="${esc(t.b || '')}" placeholder="Ort / Bemerkung" autocomplete="off">` +
       `<span class="pausebox">${pauseHtml(t)}</span>` +
-      `<button class="kopie" data-kopie${hatEintrag(t) ? '' : ' hidden'} aria-label="Auf andere Personen übertragen">Auf alle</button></div></div></li>`;
+      `<button class="kopie" data-kopie${kopierbar(t) ? '' : ' hidden'} aria-label="Auf andere Personen oder Tage übertragen">Auf alle</button></div></div></li>`;
   }
   html += '</ul>' +
     `<div class="card"><div class="aktionen" style="margin-top:0"><button id="umbenennen">Person umbenennen</button><button class="del" id="loeschen">Person löschen</button></div></div>`;
@@ -313,7 +315,7 @@ function render() {
     // die anderen Felder der Zeile nachziehen (nicht das, in dem gerade getippt wird)
     li.querySelectorAll('input').forEach((inp) => { if (inp !== e.target && inp.dataset.f !== 'b') inp.value = t[inp.dataset.f] || ''; });
     li.querySelector('.pausebox').innerHTML = pauseHtml(t);
-    li.querySelector('[data-kopie]').hidden = !hatEintrag(t);
+    li.querySelector('[data-kopie]').hidden = !kopierbar(t);
     save();
     aktualisiereSummen();
   };
@@ -364,40 +366,68 @@ function zurueck() {
 
 // ---------- Tageseintrag auf andere Personen der Firma übertragen ----------
 let kopieTag = null;
+const tagText = (d) => `${WT[new Date(cur.y, cur.m, d).getDay()]} ${String(d).padStart(2, '0')}.${String(cur.m + 1).padStart(2, '0')}.`;
 function oeffneKopie(d) {
   const f = firma(), p = person(), k = key();
   const t = p && p.monate[k] && p.monate[k].tage[d];
-  if (!hatEintrag(t)) return;
+  if (!kopierbar(t)) return;
   const andere = leute(f).filter((x) => x.id !== p.id).sort(nachName);
-  if (!andere.length) { toast('In dieser Firma gibt es keine weiteren Personen'); return; }
   kopieTag = d;
-  const datum = `${WT[new Date(cur.y, cur.m, d).getDay()]} ${String(d).padStart(2, '0')}.${String(cur.m + 1).padStart(2, '0')}.`;
-  $('kopieText').textContent = `${datum}: ${t.h || '–'} Std., ${t.von || '?'}–${t.bis || '?'}${t.b ? ', ' + t.b : ''}`;
+  $('kopieText').textContent = `${tagText(d)}: ` + (hatEintrag(t) ? `${t.h || '–'} Std., ${t.von || '?'}–${t.bis || '?'}${t.b ? ', ' + t.b : ''}` : t.b);
   // Wer an dem Tag schon etwas eingetragen hat, ist zur Sicherheit nicht vorausgewählt
-  $('kopieListe').innerHTML = andere.map((x) => {
-    const alt = x.monate[k] && x.monate[k].tage[d], hat = hatEintrag(alt);
+  $('kopieListe').innerHTML = andere.length ? andere.map((x) => {
+    const alt = x.monate[k] && x.monate[k].tage[d], hat = kopierbar(alt);
+    const was = hat && (hatEintrag(alt) ? `${alt.h || '–'} Std. (${alt.von || '?'}–${alt.bis || '?'})` : `„${alt.b}“`);
     return `<label class="wahl"><input type="checkbox" data-id="${x.id}"${hat ? '' : ' checked'}><span>${esc(x.name)}` +
-      (hat ? `<small>hat schon ${esc(alt.h || '–')} Std. (${esc(alt.von || '?')}–${esc(alt.bis || '?')}) – wird ersetzt</small>` : '') + `</span></label>`;
-  }).join('');
+      (hat ? `<small>hat schon ${esc(was)} – wird ersetzt</small>` : '') + `</span></label>`;
+  }).join('') : '<p class="hint" style="margin:0">Keine weiteren Personen in dieser Firma.</p>';
+  $('kopieAlle').hidden = !andere.length;
+  // Folgetage bis Monatsende zur Auswahl
+  const n = tageImMonat(cur.y, cur.m);
+  let opt = `<option value="${d}">nein, nur ${tagText(d)}</option>`;
+  for (let e = d + 1; e <= n; e++) opt += `<option value="${e}">bis ${tagText(e)}</option>`;
+  $('kopieBis').innerHTML = opt;
+  $('kopieBisWrap').hidden = d >= n;
+  $('kopieWe').checked = hatEintrag(t);   // Arbeitsstunden: Wochenende auslassen; Urlaub o. Ä.: durchgehend
+  $('kopieWeWrap').hidden = true;
+  $('kopieBis').onchange = () => { $('kopieWeWrap').hidden = +$('kopieBis').value === kopieTag; };
   $('kopie').hidden = false;
 }
 function kopieOk() {
   const f = firma(), p = person(), k = key();
   const t = p && p.monate[k] && p.monate[k].tage[kopieTag];
-  if (!f || !hatEintrag(t)) { $('kopie').hidden = true; return; }
-  let n = 0;
-  $('kopieListe').querySelectorAll('input:checked').forEach((cb) => {
-    const x = f.personen.find((y) => y.id === cb.dataset.id && !y.del);
-    if (!x) return;
+  if (!f || !kopierbar(t)) { $('kopie').hidden = true; return; }
+  const bis = Math.max(kopieTag, +$('kopieBis').value || kopieTag), ohneWe = $('kopieWe').checked;
+  const muster = () => {
     const neu = { t: Date.now() };
     ['h', 'von', 'bis', 'p', 'b'].forEach((feld) => { if (t[feld] != null && t[feld] !== '') neu[feld] = t[feld]; });
-    (x.monate[k] || (x.monate[k] = { tage: {} })).tage[kopieTag] = neu;
-    n++;
+    return neu;
+  };
+  // Ziel: angehakte Personen (gleicher Tag + Folgetage) und die Person selbst (nur Folgetage)
+  const ziele = [p];
+  $('kopieListe').querySelectorAll('input:checked').forEach((cb) => {
+    const x = f.personen.find((y) => y.id === cb.dataset.id && !y.del);
+    if (x) ziele.push(x);
+  });
+  let n = 0, belegt = 0;
+  const personen = new Set();
+  ziele.forEach((x) => {
+    const tage = (x.monate[k] || (x.monate[k] = { tage: {} })).tage;
+    for (let d = kopieTag; d <= bis; d++) {
+      if (x === p && d === kopieTag) continue;                          // Ausgangstag selbst
+      if (d > kopieTag && ohneWe && frei(cur.y, cur.m, d)) continue;
+      if (d > kopieTag && kopierbar(tage[d])) { belegt++; continue; }   // Folgetage: Vorhandenes nie überschreiben
+      tage[d] = muster();
+      n++;
+      personen.add(x.id);
+    }
   });
   $('kopie').hidden = true;
-  if (!n) { toast('Niemand ausgewählt'); return; }
+  if (!n) { toast(belegt ? 'Alle gewählten Tage sind schon belegt' : 'Nichts ausgewählt'); return; }
   save();
-  toast(`Auf ${n} ${n === 1 ? 'Person' : 'Personen'} übertragen`);
+  render();
+  toast(`${n} ${n === 1 ? 'Eintrag' : 'Einträge'} für ${personen.size} ${personen.size === 1 ? 'Person' : 'Personen'} übertragen` +
+    (belegt ? ` (${belegt} schon ${belegt === 1 ? 'belegter Tag' : 'belegte Tage'} übersprungen)` : ''));
 }
 
 // ---------- Dialog (Name eingeben) ----------
