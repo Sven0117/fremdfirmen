@@ -2,7 +2,7 @@
 
 // Seite (index.html) und Programm (app.js) müssen zusammenpassen. Nach einem Update kann der Browser kurz eine
 // alte Seite mit neuem Programm mischen – dann einmal neu laden. Bei jedem Update hier, in index.html und sw.js hochzählen.
-const APP_VERSION = '8';
+const APP_VERSION = '9';
 if (/^https?:$/.test(location.protocol)) {
   const seite = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (seite !== APP_VERSION && sessionStorage.getItem('neuGeladen') !== APP_VERSION) {
@@ -181,6 +181,19 @@ function setzeTag(t, feld, wert, datum) {
   t.t = Date.now();
 }
 
+// Ort/Bemerkung des letzten Tags davor mit Stunden (auch im Vormonat) – Vorschlag für neue Einträge
+function letzterOrt(p, y, m, d) {
+  for (let i = 0; i < 62; i++) {
+    d--;
+    if (d < 1) { m--; if (m < 0) { m = 11; y--; } d = tageImMonat(y, m); }
+    const t = p.monate[key(y, m)] && p.monate[key(y, m)].tage[d];
+    if (t && zahl(t.h) > 0 && t.b) return t.b;
+  }
+  return '';
+}
+// Tage, deren Ort automatisch vorgeschlagen wurde (nur bis zum Neuladen): wird die Stundenzahl wieder gelöscht, verschwindet er mit
+const autoOrt = new Set();
+
 // Pause-Auswahl einer Tageszeile (nur wenn Stunden, Beginn und Ende da sind)
 function pauseHtml(t) {
   const ps = pauseVon(t);
@@ -309,11 +322,17 @@ function render() {
       `<input class="uhr" type="time" data-f="von" value="${esc(t.von || '')}" aria-label="Beginn">` +
       `<span class="strich">–</span>` +
       `<input class="uhr" type="time" data-f="bis" value="${esc(t.bis || '')}" aria-label="Ende"></div>` +
-      `<div class="z2"><input class="bem" data-f="b" value="${esc(t.b || '')}" placeholder="Ort / Bemerkung" autocomplete="off">` +
+      `<div class="z2"><input class="bem" data-f="b" value="${esc(t.b || '')}" placeholder="Ort / Bemerkung" autocomplete="off" list="orteListe">` +
       `<span class="pausebox">${pauseHtml(t)}</span>` +
       `<button class="kopie" data-kopie${kopierbar(t) ? '' : ' hidden'} aria-label="Auf andere Personen oder Tage übertragen">Auf alle</button></div></div></li>`;
   }
-  html += '</ul>' +
+  // Auswahlliste für Ort/Bemerkung: bisherige Orte dieser Firma, neueste zuerst
+  const orte = new Map();
+  leute(f).forEach((x) => Object.keys(x.monate).forEach((mk) => Object.entries(x.monate[mk].tage).forEach(([d, t]) => {
+    if (t.b) orte.set(t.b, Math.max(orte.get(t.b) || 0, (t.t || 0)));
+  })));
+  const orteHtml = [...orte.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([o]) => `<option value="${esc(o)}">`).join('');
+  html += '</ul>' + `<datalist id="orteListe">${orteHtml}</datalist>` +
     `<div class="card"><div class="aktionen" style="margin-top:0"><button id="umbenennen">Person umbenennen</button><button class="del" id="loeschen">Person löschen</button></div></div>`;
   main.innerHTML = html;
 
@@ -324,6 +343,15 @@ function render() {
     const m2 = x.monate[k] || (x.monate[k] = { tage: {} });
     const t = m2.tage[d] || (m2.tage[d] = {});   // leerer Eintrag bleibt mit Zeitstempel stehen (Löschen wird so abgeglichen)
     setzeTag(t, feld, e.target.value.trim(), { y: cur.y, m: cur.m, d: +d });
+    // Ort vom letzten Arbeitstag übernehmen, solange hier noch keiner steht (überschreibbar)
+    const merk = `${x.id}|${k}|${d}`;
+    if (feld === 'b') autoOrt.delete(merk);
+    else if (zahl(t.h) > 0 && !t.b) {
+      const ort = letzterOrt(x, cur.y, cur.m, +d);
+      if (ort) { t.b = ort; autoOrt.add(merk); li.querySelector('[data-f="b"]').value = ort; }
+    } else if (!zahl(t.h) && !t.von && !t.bis && autoOrt.has(merk)) {
+      delete t.b; autoOrt.delete(merk); li.querySelector('[data-f="b"]').value = '';
+    }
     // die anderen Felder der Zeile nachziehen (nicht das, in dem gerade getippt wird)
     li.querySelectorAll('input').forEach((inp) => { if (inp !== e.target && inp.dataset.f !== 'b') inp.value = t[inp.dataset.f] || ''; });
     li.querySelector('.pausebox').innerHTML = pauseHtml(t);
