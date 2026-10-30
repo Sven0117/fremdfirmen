@@ -2,7 +2,7 @@
 
 // Seite (index.html) und Programm (app.js) müssen zusammenpassen. Nach einem Update kann der Browser kurz eine
 // alte Seite mit neuem Programm mischen – dann einmal neu laden. Bei jedem Update hier, in index.html und sw.js hochzählen.
-const APP_VERSION = '9';
+const APP_VERSION = '10';
 if (/^https?:$/.test(location.protocol)) {
   const seite = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (seite !== APP_VERSION && sessionStorage.getItem('neuGeladen') !== APP_VERSION) {
@@ -71,6 +71,39 @@ function save() {
 }
 const aktFirmen = () => data.firmen.filter((f) => !f.del);
 const leute = (f) => f.personen.filter((p) => !p.del);
+// Archiv: archivAb = 'JJJJ-MM', ab diesem Monat ausgeblendet; frühere Monate bleiben wie sie sind.
+// Wer im Monat trotzdem Einträge hat, wird weiter angezeigt (nichts verschwindet aus Listen mit Stunden).
+const imArchiv = (x, k) => !!x.archivAb && k >= x.archivAb;
+const hatMonat = (p, k) => !!p.monate[k] && Object.values(p.monate[k].tage).some((t) => kopierbar(t));
+const sichtbarPerson = (p, k) => !imArchiv(p, k) || hatMonat(p, k);
+const sichtbarFirma = (f, k) => !imArchiv(f, k) || leute(f).some((p) => hatMonat(p, k));
+const leuteMonat = (f, k) => leute(f).filter((p) => sichtbarPerson(p, k));
+const naechsterMonat = (k) => { const [y, m] = k.split('-').map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; };
+const monatText = (k) => { const [y, m] = k.split('-').map(Number); return `${MONATE[m - 1]} ${y}`; };
+// Zugeklappter Archiv-Bereich unter einer Liste (Firmen oder Personen); Antippen öffnet wie gewohnt
+let archivOffen = false;
+function archivHtml(eintraege, art) {
+  return `<details class="archiv"${archivOffen ? ' open' : ''}><summary>Archiv <span class="anz">${eintraege.length}</span>` +
+    `<small>${art === 'firma' ? 'Firmen' : 'Personen'}, die in diesem Monat nicht mehr dabei sind</small></summary>` +
+    eintraege.map((x) => `<div class="archivzeile" data-${art}="${x.id}"><span>${esc(x.name)}</span><small>ab ${monatText(x.ab)}</small><span class="pfeil">›</span></div>`).join('') +
+    '</details>';
+}
+// Ins Archiv ab dem angezeigten Monat – hat der Monat schon Stunden, erst ab dem nächsten
+function archiviere(x, hatStunden, art) {
+  const k = key(), ab = hatStunden ? naechsterMonat(k) : k;
+  if (!confirm(`„${x.name}“ ins Archiv?\n\nAb ${monatText(ab)} ${art} nicht mehr angezeigt. Alle Monate davor bleiben unverändert, die Stunden bleiben gespeichert.`)) return false;
+  x.archivAb = ab;
+  x.t = Date.now();
+  save();
+  toast(`Ab ${monatText(ab)} im Archiv`);
+  return true;
+}
+function ausArchiv(x) {
+  delete x.archivAb;
+  x.t = Date.now();
+  save();
+  toast(`„${x.name}“ ist zurück`);
+}
 
 const heute = new Date();
 let cur = { y: heute.getFullYear(), m: heute.getMonth() };
@@ -239,22 +272,26 @@ function render() {
 
   if (ansicht.name === 'firmen') {
     $('titel').innerHTML = 'Fremd<b>firmen</b>';
-    const firmen = aktFirmen();
-    let html = summenKarte(`Alle Firmen – ${mText}`, firmen.reduce((a, f) => a + summeFirma(f, k), 0));
+    const alleFirmen = aktFirmen();
+    const firmen = alleFirmen.filter((f) => sichtbarFirma(f, k)).sort(nachName);
+    const archiv = alleFirmen.filter((f) => !sichtbarFirma(f, k)).sort(nachName);
+    let html = summenKarte(`Alle Firmen – ${mText}`, alleFirmen.reduce((a, f) => a + summeFirma(f, k), 0));
     html += `<button class="pdfbtn" id="pdfAlle">Anwesenheitsliste (alle Firmen)</button>`;
     if (firmen.length) {
-      html += '<div class="h2">Firmen</div>' + firmen.sort(nachName).map((f) => {
-        const n = leute(f).length;
+      html += '<div class="h2">Firmen</div>' + firmen.map((f) => {
+        const n = leuteMonat(f, k).length;
         return `<div class="card firma" data-firma="${f.id}"><div class="name">${esc(f.name)}</div>` +
-          `<div class="sub">${n} ${n === 1 ? 'Person' : 'Personen'}</div>` +
+          `<div class="sub">${n} ${n === 1 ? 'Person' : 'Personen'}${imArchiv(f, k) ? ' · im Archiv' : ''}</div>` +
           `<div class="zahlen"><span>${MONATE[cur.m]}</span><b>${fmtH(summeFirma(f, k))}</b></div></div>`;
       }).join('');
     } else {
-      html += '<p class="leerhinweis">Noch keine Fremdfirma angelegt.</p>';
+      html += `<p class="leerhinweis">${alleFirmen.length ? 'In diesem Monat keine Firma.' : 'Noch keine Fremdfirma angelegt.'}</p>`;
     }
     html += '<button class="add" id="addBtn">+ Firma hinzufügen</button>';
+    if (archiv.length) html += archivHtml(archiv.map((f) => ({ id: f.id, name: f.name, ab: f.archivAb })), 'firma');
     main.innerHTML = html;
     main.querySelectorAll('[data-firma]').forEach((li) => (li.onclick = () => gehe({ name: 'firma', firma: li.dataset.firma })));
+    const det = main.querySelector('details.archiv'); if (det) det.ontoggle = () => (archivOffen = det.open);
     $('pdfAlle').onclick = () => pdfAnwesenheit(null);
     $('addBtn').onclick = () => dialog({ titel: 'Neue Firma', nameLbl: 'Firmenname' }, (name) => {
       data.firmen.push({ id: uid(), name, t: Date.now(), personen: [] });
@@ -268,31 +305,43 @@ function render() {
   if (ansicht.name === 'firma') {
     $('titel').textContent = f.name;
     let html = summenKarte(`${f.name} – ${mText}`, summeFirma(f, k), summeFirma(f, null));
+    if (imArchiv(f, k)) html += `<p class="archivhinweis">Im Archiv seit ${monatText(f.archivAb)}.</p>`;
     html += `<button class="pdfbtn" id="pdfListe">Anwesenheitsliste (wer, wann, wo)</button>` +
       `<button class="pdfbtn hell" id="pdfBtn">Monatsübersicht (Stunden)</button>`;
-    if (leute(f).length) {
-      html += '<ul class="liste">' + leute(f).sort(nachName).map((p) => {
+    const aktiv = leute(f).filter((p) => sichtbarPerson(p, k)).sort(nachName);
+    const weg = leute(f).filter((p) => !sichtbarPerson(p, k)).sort(nachName);
+    if (aktiv.length) {
+      html += '<ul class="liste">' + aktiv.map((p) => {
         const tg = tageMonat(p, k);
         return `<li class="klick" data-person="${p.id}"><div class="links"><div class="name">${esc(p.name)}</div>` +
-          `<div class="sub">${tg} ${tg === 1 ? 'Tag' : 'Tage'}</div></div>` +
+          `<div class="sub">${tg} ${tg === 1 ? 'Tag' : 'Tage'}${imArchiv(p, k) ? ' · im Archiv' : ''}</div></div>` +
           `<div class="rechts"><div class="h">${fmtH(summePerson(p, k))}</div></div><span class="pfeil">›</span></li>`;
       }).join('') + '</ul>';
     } else {
-      html += '<p class="leerhinweis">Noch keine Person in dieser Firma.</p>';
+      html += `<p class="leerhinweis">${leute(f).length ? 'In diesem Monat niemand aus dieser Firma.' : 'Noch keine Person in dieser Firma.'}</p>`;
     }
-    html += '<button class="add" id="addBtn">+ Person hinzufügen</button>' +
-      `<div class="card"><div class="aktionen" style="margin-top:0"><button id="umbenennen">Firma umbenennen</button><button class="del" id="loeschen">Firma löschen</button></div></div>`;
+    html += '<button class="add" id="addBtn">+ Person hinzufügen</button>';
+    if (weg.length) html += archivHtml(weg.map((p) => ({ id: p.id, name: p.name, ab: p.archivAb })), 'person');
+    html += `<div class="card"><div class="aktionen" style="margin-top:0"><button id="umbenennen">Umbenennen</button>` +
+      (f.archivAb ? `<button id="archivBtn">Aus dem Archiv holen</button><button class="del" id="loeschen">Endgültig löschen</button>`
+        : `<button id="archivBtn">Ins Archiv</button>`) + `</div></div>`;
     main.innerHTML = html;
     main.querySelectorAll('[data-person]').forEach((li) => (li.onclick = () => gehe({ name: 'person', firma: f.id, person: li.dataset.person })));
+    const det = main.querySelector('details.archiv'); if (det) det.ontoggle = () => (archivOffen = det.open);
+    $('archivBtn').onclick = () => {
+      const x = firma(); if (!x) return;
+      if (x.archivAb) { ausArchiv(x); render(); return; }
+      if (archiviere(x, summeFirma(x, key()) > 0, 'wird die Firma')) gehe({ name: 'firmen' });
+    };
     // In den Handlern immer firma() frisch holen (siehe oben)
     $('pdfBtn').onclick = pdfFirma;
     $('pdfListe').onclick = () => pdfAnwesenheit(firma());
     $('umbenennen').onclick = () => dialog({ titel: 'Firma umbenennen', nameLbl: 'Firmenname', name: firma().name }, (name) => {
       const x = firma(); if (x) { x.name = name; x.t = Date.now(); }
     });
-    $('loeschen').onclick = () => {
+    if ($('loeschen')) $('loeschen').onclick = () => {
       const x = firma();
-      if (!x || !confirm(`Firma „${x.name}“ mit allen Personen und Stunden löschen?`)) return;
+      if (!x || !confirm(`Firma „${x.name}“ ENDGÜLTIG löschen?\n\nAlle Personen und alle Stunden – auch aus früheren Monaten – sind dann weg, auch auf den anderen Geräten. Zum Ausblenden reicht das Archiv.`)) return;
       x.del = true; x.t = Date.now(); x.personen = [];
       save();
       gehe({ name: 'firmen' });
@@ -333,7 +382,10 @@ function render() {
   })));
   const orteHtml = [...orte.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([o]) => `<option value="${esc(o)}">`).join('');
   html += '</ul>' + `<datalist id="orteListe">${orteHtml}</datalist>` +
-    `<div class="card"><div class="aktionen" style="margin-top:0"><button id="umbenennen">Person umbenennen</button><button class="del" id="loeschen">Person löschen</button></div></div>`;
+    `<div class="card"><div class="aktionen" style="margin-top:0"><button id="umbenennen">Umbenennen</button>` +
+    (p.archivAb ? `<button id="archivBtn">Aus dem Archiv holen</button><button class="del" id="loeschen">Endgültig löschen</button>`
+      : `<button id="archivBtn">Ins Archiv</button>`) + `</div></div>`;
+  if (imArchiv(p, k)) html = html.replace('<button class="pdfbtn"', `<p class="archivhinweis">Im Archiv seit ${monatText(p.archivAb)}.</p><button class="pdfbtn"`);
   main.innerHTML = html;
 
   const beiEingabe = (e) => {
@@ -370,9 +422,14 @@ function render() {
   $('umbenennen').onclick = () => dialog({ titel: 'Person umbenennen', nameLbl: 'Name', name: person().name }, (name) => {
     const x = person(); if (x) { x.name = name; x.t = Date.now(); }
   });
-  $('loeschen').onclick = () => {
+  $('archivBtn').onclick = () => {
+    const x = person(); if (!x) return;
+    if (x.archivAb) { ausArchiv(x); render(); return; }
+    if (archiviere(x, hatMonat(x, key()), 'wird die Person')) gehe({ name: 'firma', firma: ansicht.firma });
+  };
+  if ($('loeschen')) $('loeschen').onclick = () => {
     const x = person();
-    if (!x || !confirm(`„${x.name}“ mit allen Stunden löschen?`)) return;
+    if (!x || !confirm(`„${x.name}“ ENDGÜLTIG löschen?\n\nAlle Stunden – auch aus früheren Monaten – sind dann weg, auch auf den anderen Geräten. Zum Ausblenden reicht das Archiv.`)) return;
     x.del = true; x.t = Date.now(); x.monate = {};
     save();
     gehe({ name: 'firma', firma: ansicht.firma });
@@ -411,7 +468,7 @@ function oeffneKopie(d) {
   const f = firma(), p = person(), k = key();
   const t = p && p.monate[k] && p.monate[k].tage[d];
   if (!kopierbar(t)) return;
-  const andere = leute(f).filter((x) => x.id !== p.id).sort(nachName);
+  const andere = leuteMonat(f, k).filter((x) => x.id !== p.id).sort(nachName);
   kopieTag = d;
   $('kopieText').textContent = `${tagText(d)}: ` + (hatEintrag(t) ? `${t.h || '–'} Std., ${t.von || '?'}–${t.bis || '?'}${t.b ? ', ' + t.b : ''}` : t.b);
   // Wer an dem Tag schon etwas eingetragen hat, ist zur Sicherheit nicht vorausgewählt
@@ -911,6 +968,7 @@ function mergeTage(a, b) {
 function mergePerson(a, b) {
   const n = neuer(a, b), out = { id: a.id, name: n.name, t: n.t || 0, monate: {} };
   if (n.del) { out.del = true; return out; }
+  if (n.archivAb) out.archivAb = n.archivAb;
   Object.keys(Object.assign({}, a.monate, b.monate)).forEach((k) => {
     out.monate[k] = { tage: mergeTage((a.monate[k] || {}).tage || {}, (b.monate[k] || {}).tage || {}) };
   });
@@ -919,6 +977,7 @@ function mergePerson(a, b) {
 function mergeFirma(a, b) {
   const n = neuer(a, b), out = { id: a.id, name: n.name, t: n.t || 0, personen: [] };
   if (n.del) { out.del = true; return out; }
+  if (n.archivAb) out.archivAb = n.archivAb;
   out.personen = mergeListe(a.personen || [], b.personen || [], mergePerson);
   return out;
 }
