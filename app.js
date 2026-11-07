@@ -2,7 +2,7 @@
 
 // Seite (index.html) und Programm (app.js) müssen zusammenpassen. Nach einem Update kann der Browser kurz eine
 // alte Seite mit neuem Programm mischen – dann einmal neu laden. Bei jedem Update hier, in index.html und sw.js hochzählen.
-const APP_VERSION = '10';
+const APP_VERSION = '11';
 if (/^https?:$/.test(location.protocol)) {
   const seite = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (seite !== APP_VERSION && sessionStorage.getItem('neuGeladen') !== APP_VERSION) {
@@ -447,10 +447,14 @@ function aktualisiereSummen() {
   }
 }
 
+const TIEFE = { firmen: 0, firma: 1, person: 2 };
 function gehe(neu) {
+  const vorher = TIEFE[ansicht.name] || 0;
   ansicht = Object.assign({ firma: null, person: null }, neu);
   render();
   window.scrollTo(0, 0);
+  // tiefer = kommt von rechts, zurück = kommt von links (gleicher Weg rein und raus)
+  if (window.Bewegung) Bewegung.rein([$('main'), $('titel')], Math.sign((TIEFE[ansicht.name] || 0) - vorher));
   if (ansicht.name === 'person') {
     const h = document.querySelector('#tage li.heute');
     if (h) h.scrollIntoView({ block: 'center' });
@@ -1190,8 +1194,10 @@ window.onAppResume = () => planeSync(300);
 function init() {
   $('logo').src = window.LOGO_BREIT || '';   // Jansen-Logo im Kopf
   stempeln(data.firmen);
-  $('prev').onclick = () => { cur.m--; if (cur.m < 0) { cur.m = 11; cur.y--; } render(); };
-  $('next').onclick = () => { cur.m++; if (cur.m > 11) { cur.m = 0; cur.y++; } render(); };
+  // Monatswechsel: Inhalt kommt aus der Pfeilrichtung
+  const monatRein = (r) => { if (window.Bewegung) Bewegung.rein([$('monat'), $('main')], r, 24); };
+  $('prev').onclick = () => { cur.m--; if (cur.m < 0) { cur.m = 11; cur.y--; } render(); monatRein(-1); };
+  $('next').onclick = () => { cur.m++; if (cur.m > 11) { cur.m = 0; cur.y++; } render(); monatRein(1); };
   $('zurueck').onclick = zurueck;
   const oeffneEinstellungen = () => { zeigeDropbox(); $('settings').hidden = false; };
   $('settingsBtn').onclick = oeffneEinstellungen;
