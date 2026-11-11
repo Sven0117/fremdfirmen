@@ -2,7 +2,7 @@
 
 // Seite (index.html) und Programm (app.js) müssen zusammenpassen. Nach einem Update kann der Browser kurz eine
 // alte Seite mit neuem Programm mischen – dann einmal neu laden. Bei jedem Update hier, in index.html und sw.js hochzählen.
-const APP_VERSION = '11';
+const APP_VERSION = '12';
 if (/^https?:$/.test(location.protocol)) {
   const seite = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (seite !== APP_VERSION && sessionStorage.getItem('neuGeladen') !== APP_VERSION) {
@@ -781,6 +781,86 @@ function seitenAnwesenheit(f, y, m) {
   return seiten;
 }
 
+// Zusatzblatt zur Anwesenheitsliste: Stunden je Ort im Monat (f = eine Firma oder null für alle Firmen).
+// Gleiche Orte in anderer Schreibweise (Groß/Klein, Leerzeichen) werden zusammengefasst; Tage ohne Stunden (z. B. Urlaub) zählen nicht.
+function seitenOrte(f, y, m) {
+  const k = key(y, m), alle = !f, orte = new Map();
+  (alle ? aktFirmen() : [f]).forEach((fa) => leute(fa).forEach((p) => {
+    const tage = (p.monate[k] || { tage: {} }).tage;
+    Object.entries(tage).forEach(([d, t]) => {
+      const h = zahl(t.h);
+      if (!(h > 0)) return;
+      const name = (t.b || '').trim().replace(/\s+/g, ' '), schl = name.toLowerCase() || '\u0000';
+      const o = orte.get(schl) || { namen: new Map(), stunden: 0, tage: 0, personen: new Set(), firmen: new Set(), von: 99, bis: 0 };
+      o.namen.set(name, (o.namen.get(name) || 0) + 1);
+      o.stunden += h; o.tage++; o.personen.add(fa.id + '|' + p.id); o.firmen.add(fa.name);
+      o.von = Math.min(o.von, +d); o.bis = Math.max(o.bis, +d);
+      orte.set(schl, o);
+    });
+  }));
+  const zeilen = [...orte.values()].map((o) => ({
+    ort: [...o.namen.entries()].sort((a, b) => b[1] - a[1])[0][0] || '(ohne Ort)',
+    stunden: o.stunden, tage: o.tage, personen: o.personen.size, firmen: [...o.firmen].sort((a, b) => a.localeCompare(b, 'de')).join(', '),
+    zeitraum: o.von === o.bis ? `${String(o.von).padStart(2, '0')}.` : `${String(o.von).padStart(2, '0')}.–${String(o.bis).padStart(2, '0')}.`,
+  })).sort((a, b) => (a.ort === '(ohne Ort)') - (b.ort === '(ohne Ort)') || b.stunden - a.stunden || a.ort.localeCompare(b.ort, 'de'));   // „ohne Ort“ immer zuletzt
+  const gesamt = zeilen.reduce((a, r) => a + r.stunden, 0), tageGes = zeilen.reduce((a, r) => a + r.tage, 0);
+
+  const L = 40, R = 754, T = 130, KH = 28, RH = 24, PRO = 32;
+  // Spalten: Ort | (Firmen) | Zeitraum | Personen | Arbeitstage | Stunden
+  const W = alle ? [190, 210, 80, 70, 80] : [330, 0, 100, 80, 100];
+  const X = [L];
+  W.forEach((w) => X.push(X[X.length - 1] + w));
+  X.push(R);
+  const kopf = ['Ort / Baustelle', 'Firmen', 'Zeitraum', 'Personen', 'Arbeitstage', 'Stunden'];
+  const anz = Math.max(1, Math.ceil((zeilen.length + 1) / PRO));
+  const seiten = [];
+  for (let s = 0; s < anz; s++) {
+    const z = neueSeite(A4K, A4L);
+    const teil = zeilen.slice(s * PRO, (s + 1) * PRO), letzte = s === anz - 1;
+    z.txt('Stunden nach Ort', L, 50, { size: 20, bold: true });
+    if (anz > 1) z.txt(`Seite ${s + 1} / ${anz}`, R, 50, { size: 11, align: 'right' });
+    z.txt('Firma:', L, 84, { size: 13, bold: true });
+    z.txt(alle ? 'Alle Firmen' : f.name, L + 52, 84, { size: 13, maxW: 380 });
+    z.txt('Monat:', 500, 84, { size: 13, bold: true });
+    z.txt(`${MONATE[m]} ${y}`, 552, 84, { size: 13 });
+    z.txt('Zusammenfassung der Anwesenheitsliste: alle Tage mit Stunden, nach Ort zusammengezählt.', L, 108, { size: 9, farbe: '#555' });
+
+    const n = teil.length + (letzte ? 1 : 0), B = T + KH + n * RH;
+    z.fill(L, T, R, T + KH, '#D9D9D9');
+    kopf.forEach((t, i) => {
+      if (!alle && i === 1) return;
+      if (i <= 1) z.txt(t, X[i] + 6, T + KH / 2, { size: 12, bold: true });
+      else z.txt(t, (X[i] + X[i + 1]) / 2, T + KH / 2, { size: 12, bold: true, align: 'center' });
+    });
+    teil.forEach((r, i) => {
+      const top = T + KH + i * RH, cy = top + RH / 2;
+      if (i > 0) z.linie(L, top, R, top, 0.5);
+      z.txt(r.ort, X[0] + 6, cy, { size: 12, bold: true, maxW: W[0] - 10, farbe: r.ort === '(ohne Ort)' ? '#777' : '#000' });
+      if (alle) z.txt(r.firmen, X[1] + 6, cy, { size: 10.5, maxW: W[1] - 10 });
+      z.txt(`${r.zeitraum}${String(m + 1).padStart(2, '0')}.`, (X[2] + X[3]) / 2, cy, { size: 11, align: 'center', maxW: W[2] - 6 });
+      z.txt(r.personen, (X[3] + X[4]) / 2, cy, { size: 11.5, align: 'center' });
+      z.txt(r.tage, (X[4] + X[5]) / 2, cy, { size: 11.5, align: 'center' });
+      z.txt(fmtZ(r.stunden), (X[5] + X[6]) / 2, cy, { size: 12.5, bold: true, align: 'center' });
+    });
+    if (letzte) {
+      const top = B - RH;
+      z.fill(L, top, R, B, '#D9D9D9');
+      z.txt(zeilen.length ? `Summe (${zeilen.length} ${zeilen.length === 1 ? 'Ort' : 'Orte'})` : 'Keine Stunden in diesem Monat', X[0] + 6, top + RH / 2, { size: 12, bold: true });
+      if (zeilen.length) {
+        z.txt(tageGes, (X[4] + X[5]) / 2, top + RH / 2, { size: 12, bold: true, align: 'center' });
+        z.txt(fmtZ(gesamt), (X[5] + X[6]) / 2, top + RH / 2, { size: 13, bold: true, align: 'center' });
+      }
+      z.linie(L, top, R, top, 1.3);
+    }
+    z.linie(L, T + KH, R, T + KH, 1.3);
+    X.slice(1, 6).forEach((x, i) => { if (alle || i !== 0) z.linie(x, T, x, B, 0.6); });
+    z.box(L, T, R, B, 1.6);
+    z.txt(`Erstellt am ${datumHeute()}`, L, B + 16, { size: 9, farbe: '#555' });
+    seiten.push(z);
+  }
+  return seiten;
+}
+
 // Stundennachweis einer Person: Hochformat, mit Beginn/Ende/Pause und Unterschriftszeilen
 function seitenPerson(f, p, y, m) {
   const k = key(y, m), n = tageImMonat(y, m), tage = (p.monate[k] || { tage: {} }).tage;
@@ -879,7 +959,7 @@ function pdfFirma() {
 function pdfAnwesenheit(f) {
   const mText = `${MONATE[cur.m]} ${cur.y}`, wer = f ? f.name : 'alle Firmen';
   zeigeVorschau({
-    seiten: seitenAnwesenheit(f, cur.y, cur.m),
+    seiten: [...seitenAnwesenheit(f, cur.y, cur.m), ...seitenOrte(f, cur.y, cur.m)],   // zuletzt: Stunden je Ort
     titel: `Anwesenheit ${wer} – ${mText}`,
     datei: dateiName(`Anwesenheit ${wer} ${mText}`) + '.pdf',
     betreff: `Anwesenheitsliste ${wer} – ${mText}`,
