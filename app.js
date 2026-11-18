@@ -2,7 +2,7 @@
 
 // Seite (index.html) und Programm (app.js) müssen zusammenpassen. Nach einem Update kann der Browser kurz eine
 // alte Seite mit neuem Programm mischen – dann einmal neu laden. Bei jedem Update hier, in index.html und sw.js hochzählen.
-const APP_VERSION = '12';
+const APP_VERSION = '13';
 if (/^https?:$/.test(location.protocol)) {
   const seite = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (seite !== APP_VERSION && sessionStorage.getItem('neuGeladen') !== APP_VERSION) {
@@ -557,6 +557,8 @@ window.onAndroidBack = function () {
   if (ansicht.name !== 'firmen') { zurueck(); return true; }
   return false;
 };
+// Gibt es etwas, wohin die Zurück-Taste gehen kann? (gleiche Reihenfolge wie oben, ohne etwas zu tun)
+const zurueckMoeglich = () => !$('vorschau').hidden || ['kopie', 'dialog', 'settings'].some((id) => !$(id).hidden) || ansicht.name !== 'firmen';
 
 function toast(msg) {
   const t = $('toast');
@@ -1273,6 +1275,7 @@ window.onAppResume = () => planeSync(300);
 // ---------- Ereignisse ----------
 function init() {
   $('logo').src = window.LOGO_BREIT || '';   // Jansen-Logo im Kopf
+  if (window.Bewegung) Bewegung.zurueckTaste(zurueckMoeglich, () => window.onAndroidBack());   // Android-Zurück: Schritt für Schritt
   stempeln(data.firmen);
   // Monatswechsel: Inhalt kommt aus der Pfeilrichtung
   const monatRein = (r) => { if (window.Bewegung) Bewegung.rein([$('monat'), $('main')], r, 24); };
