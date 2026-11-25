@@ -2,7 +2,7 @@
 
 // Seite (index.html) und Programm (app.js) müssen zusammenpassen. Nach einem Update kann der Browser kurz eine
 // alte Seite mit neuem Programm mischen – dann einmal neu laden. Bei jedem Update hier, in index.html und sw.js hochzählen.
-const APP_VERSION = '13';
+const APP_VERSION = '14';
 if (/^https?:$/.test(location.protocol)) {
   const seite = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (seite !== APP_VERSION && sessionStorage.getItem('neuGeladen') !== APP_VERSION) {
@@ -73,7 +73,9 @@ const aktFirmen = () => data.firmen.filter((f) => !f.del);
 const leute = (f) => f.personen.filter((p) => !p.del);
 // Archiv: archivAb = 'JJJJ-MM', ab diesem Monat ausgeblendet; frühere Monate bleiben wie sie sind.
 // Wer im Monat trotzdem Einträge hat, wird weiter angezeigt (nichts verschwindet aus Listen mit Stunden).
-const imArchiv = (x, k) => !!x.archivAb && k >= x.archivAb;
+// Personen können ab einem Tag abgemeldet sein (abAb = 'JJJJ-MM-TT'): ab dem Folgemonat stehen sie dann im Archiv
+const archivVon = (x) => x.archivAb || (x.abAb ? (x.abAb.endsWith('-01') ? x.abAb.slice(0, 7) : naechsterMonat(x.abAb.slice(0, 7))) : '');
+const imArchiv = (x, k) => !!archivVon(x) && k >= archivVon(x);
 const hatMonat = (p, k) => !!p.monate[k] && Object.values(p.monate[k].tage).some((t) => kopierbar(t));
 const sichtbarPerson = (p, k) => !imArchiv(p, k) || hatMonat(p, k);
 const sichtbarFirma = (f, k) => !imArchiv(f, k) || leute(f).some((p) => hatMonat(p, k));
@@ -88,6 +90,68 @@ function archivHtml(eintraege, art) {
     eintraege.map((x) => `<div class="archivzeile" data-${art}="${x.id}"><span>${esc(x.name)}</span><small>ab ${monatText(x.ab)}</small><span class="pfeil">›</span></div>`).join('') +
     '</details>';
 }
+// ---- Abmelden ab Tag / erster Tag (für „Auf alle“) ----
+const datumKey = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+const datumText = (s) => `${s.slice(8, 10)}.${s.slice(5, 7)}.`;
+const abgemeldet = (p, dk) => !!p.abAb && dk >= p.abAb;
+// Erster Tag mit Eintrag (oder '' bei neuen Leuten ohne Einträge)
+function ersterTag(p) {
+  let erst = '';
+  Object.keys(p.monate).forEach((mk) => Object.keys(p.monate[mk].tage).forEach((d) => {
+    if (!kopierbar(p.monate[mk].tage[d])) return;
+    const dk = `${mk}-${String(d).padStart(2, '0')}`;
+    if (!erst || dk < erst) erst = dk;
+  }));
+  return erst;
+}
+// Letzter Tag mit Eintrag
+function letzterTag(p) {
+  let letzt = '';
+  Object.keys(p.monate).forEach((mk) => Object.keys(p.monate[mk].tage).forEach((d) => {
+    if (!kopierbar(p.monate[mk].tage[d])) return;
+    const dk = `${mk}-${String(d).padStart(2, '0')}`;
+    if (dk > letzt) letzt = dk;
+  }));
+  return letzt;
+}
+const vorherTag = (dk) => { const [y, m, d] = dk.split('-').map(Number); const t = new Date(y, m - 1, d - 1); return datumKey(t.getFullYear(), t.getMonth(), t.getDate()); };
+const tagDanach = (dk) => { const [y, m, d] = dk.split('-').map(Number); const t = new Date(y, m - 1, d + 1); return datumKey(t.getFullYear(), t.getMonth(), t.getDate()); };
+// Für „Auf alle“ an Tag dk vorschlagen? Nicht, wenn abgemeldet oder (bei Leuten mit Einträgen) noch nicht dabei
+function vorschlagen(p, dk) {
+  if (abgemeldet(p, dk)) return { ja: false, warum: `abgemeldet ab ${datumText(p.abAb)}` };
+  const erst = ersterTag(p);
+  if (erst && dk < erst) return { ja: false, warum: `erst ab ${datumText(erst)} dabei` };
+  return { ja: true, warum: '' };
+}
+let abmeldenPerson = null;
+function oeffneAbmelden(pid) {
+  const f = firma(), p = f && f.personen.find((x) => x.id === pid);
+  if (!p) return;
+  abmeldenPerson = p.id;
+  const letzt = letzterTag(p);
+  $('abmTitel').textContent = p.abAb ? `${p.name} – abgemeldet ab ${datumText(p.abAb)}` : `${p.name} abmelden`;
+  $('abmDatum').value = p.abAb || (letzt ? tagDanach(letzt) : datumKey(heute.getFullYear(), heute.getMonth(), heute.getDate()));
+  $('abmHinweis').textContent = letzt ? `Letzter Eintrag: ${datumText(letzt)}${letzt.slice(0, 4)}` : 'Noch keine Einträge.';
+  $('abmZurueck').hidden = !p.abAb;
+  $('abmelden').hidden = false;
+}
+function abmeldenOk(wieder) {
+  const f = firma(), p = f && f.personen.find((x) => x.id === abmeldenPerson);
+  $('abmelden').hidden = true;
+  if (!p) return;
+  if (wieder) { delete p.abAb; toast(`${p.name} ist wieder dabei`); }
+  else {
+    const v = $('abmDatum').value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { toast('Bitte ein Datum wählen'); return; }
+    p.abAb = v;
+    delete p.archivAb;
+    toast(`${p.name}: abgemeldet ab ${datumText(v)}`);
+  }
+  p.t = Date.now();
+  save();
+  render();
+}
+
 // Ins Archiv ab dem angezeigten Monat – hat der Monat schon Stunden, erst ab dem nächsten
 function archiviere(x, hatStunden, art) {
   const k = key(), ab = hatStunden ? naechsterMonat(k) : k;
@@ -313,20 +377,24 @@ function render() {
     if (aktiv.length) {
       html += '<ul class="liste">' + aktiv.map((p) => {
         const tg = tageMonat(p, k);
-        return `<li class="klick" data-person="${p.id}"><div class="links"><div class="name">${esc(p.name)}</div>` +
-          `<div class="sub">${tg} ${tg === 1 ? 'Tag' : 'Tage'}${imArchiv(p, k) ? ' · im Archiv' : ''}</div></div>` +
-          `<div class="rechts"><div class="h">${fmtH(summePerson(p, k))}</div></div><span class="pfeil">›</span></li>`;
+        const bis = p.abAb ? ` · <span class="bis">bis ${datumText(vorherTag(p.abAb))}</span>` : '';
+        return `<li class="klick${p.abAb ? ' abgemeldet' : ''}" data-person="${p.id}"><div class="links"><div class="name">${esc(p.name)}</div>` +
+          `<div class="sub">${tg} ${tg === 1 ? 'Tag' : 'Tage'}${bis}${imArchiv(p, k) ? ' · im Archiv' : ''}</div></div>` +
+          `<div class="rechts"><div class="h">${fmtH(summePerson(p, k))}</div></div>` +
+          `<button class="tuer${p.abAb ? ' an' : ''}" data-abmelden="${p.id}" aria-label="Abmelden ab Datum" title="${p.abAb ? 'Abgemeldet – ändern' : 'Abmelden ab …'}">🚪</button>` +
+          `<span class="pfeil">›</span></li>`;
       }).join('') + '</ul>';
     } else {
       html += `<p class="leerhinweis">${leute(f).length ? 'In diesem Monat niemand aus dieser Firma.' : 'Noch keine Person in dieser Firma.'}</p>`;
     }
     html += '<button class="add" id="addBtn">+ Person hinzufügen</button>';
-    if (weg.length) html += archivHtml(weg.map((p) => ({ id: p.id, name: p.name, ab: p.archivAb })), 'person');
+    if (weg.length) html += archivHtml(weg.map((p) => ({ id: p.id, name: p.name, ab: archivVon(p) })), 'person');
     html += `<div class="card"><div class="aktionen" style="margin-top:0"><button id="umbenennen">Umbenennen</button>` +
       (f.archivAb ? `<button id="archivBtn">Aus dem Archiv holen</button><button class="del" id="loeschen">Endgültig löschen</button>`
         : `<button id="archivBtn">Ins Archiv</button>`) + `</div></div>`;
     main.innerHTML = html;
     main.querySelectorAll('[data-person]').forEach((li) => (li.onclick = () => gehe({ name: 'person', firma: f.id, person: li.dataset.person })));
+    main.querySelectorAll('[data-abmelden]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); oeffneAbmelden(b.dataset.abmelden); }));
     const det = main.querySelector('details.archiv'); if (det) det.ontoggle = () => (archivOffen = det.open);
     $('archivBtn').onclick = () => {
       const x = firma(); if (!x) return;
@@ -384,8 +452,10 @@ function render() {
   html += '</ul>' + `<datalist id="orteListe">${orteHtml}</datalist>` +
     `<div class="card"><div class="aktionen" style="margin-top:0"><button id="umbenennen">Umbenennen</button>` +
     (p.archivAb ? `<button id="archivBtn">Aus dem Archiv holen</button><button class="del" id="loeschen">Endgültig löschen</button>`
-      : `<button id="archivBtn">Ins Archiv</button>`) + `</div></div>`;
-  if (imArchiv(p, k)) html = html.replace('<button class="pdfbtn"', `<p class="archivhinweis">Im Archiv seit ${monatText(p.archivAb)}.</p><button class="pdfbtn"`);
+      : `<button id="archivBtn">${p.abAb ? `Abgemeldet ab ${datumText(p.abAb)}` : 'Abmelden ab …'}</button>` +
+        (p.abAb ? `<button class="del" id="loeschen">Endgültig löschen</button>` : '')) + `</div></div>`;
+  if (p.abAb) html = html.replace('<button class="pdfbtn"', `<p class="archivhinweis">Abgemeldet ab ${datumText(p.abAb)}${p.abAb.slice(0, 4)} – bei „Auf alle“ ab dann nicht mehr vorausgewählt.</p><button class="pdfbtn"`);
+  else if (imArchiv(p, k)) html = html.replace('<button class="pdfbtn"', `<p class="archivhinweis">Im Archiv seit ${monatText(p.archivAb)}.</p><button class="pdfbtn"`);
   main.innerHTML = html;
 
   const beiEingabe = (e) => {
@@ -425,7 +495,7 @@ function render() {
   $('archivBtn').onclick = () => {
     const x = person(); if (!x) return;
     if (x.archivAb) { ausArchiv(x); render(); return; }
-    if (archiviere(x, hatMonat(x, key()), 'wird die Person')) gehe({ name: 'firma', firma: ansicht.firma });
+    oeffneAbmelden(x.id);   // Personen: Abmelden ab Tag (ersetzt „Ins Archiv“)
   };
   if ($('loeschen')) $('loeschen').onclick = () => {
     const x = person();
@@ -475,12 +545,18 @@ function oeffneKopie(d) {
   const andere = leuteMonat(f, k).filter((x) => x.id !== p.id).sort(nachName);
   kopieTag = d;
   $('kopieText').textContent = `${tagText(d)}: ` + (hatEintrag(t) ? `${t.h || '–'} Std., ${t.von || '?'}–${t.bis || '?'}${t.b ? ', ' + t.b : ''}` : t.b);
-  // Wer an dem Tag schon etwas eingetragen hat, ist zur Sicherheit nicht vorausgewählt
-  $('kopieListe').innerHTML = andere.length ? andere.map((x) => {
-    const alt = x.monate[k] && x.monate[k].tage[d], hat = kopierbar(alt);
+  // Nicht vorausgewählt: wer an dem Tag schon etwas hat, wer abgemeldet ist und wer erst später dazukam.
+  // Diese stehen ausgegraut unten und lassen sich trotzdem anhaken.
+  const dk = datumKey(cur.y, cur.m, d);
+  const zeilen = andere.map((x) => {
+    const alt = x.monate[k] && x.monate[k].tage[d], hat = kopierbar(alt), v = vorschlagen(x, dk);
+    return { x, alt, hat, v, an: !hat && v.ja };
+  }).sort((a, b) => (b.an - a.an) || a.x.name.localeCompare(b.x.name, 'de'));
+  $('kopieListe').innerHTML = zeilen.length ? zeilen.map(({ x, alt, hat, v, an }) => {
     const was = hat && (hatEintrag(alt) ? `${alt.h || '–'} Std. (${alt.von || '?'}–${alt.bis || '?'})` : `„${alt.b}“`);
-    return `<label class="wahl"><input type="checkbox" data-id="${x.id}"${hat ? '' : ' checked'}><span>${esc(x.name)}` +
-      (hat ? `<small>hat schon ${esc(was)} – wird ersetzt</small>` : '') + `</span></label>`;
+    const notiz = hat ? `hat schon ${was} – wird ersetzt` : (!v.ja ? v.warum : '');
+    return `<label class="wahl${!v.ja ? ' weg' : ''}"><input type="checkbox" data-id="${x.id}"${an ? ' checked' : ''}><span>${esc(x.name)}` +
+      (notiz ? `<small>${esc(notiz)}</small>` : '') + `</span></label>`;
   }).join('') : '<p class="hint" style="margin:0">Keine weiteren Personen in dieser Firma.</p>';
   $('kopieAlle').hidden = !andere.length;
   // Folgetage bis Monatsende zur Auswahl
@@ -510,25 +586,29 @@ function kopieOk() {
     const x = f.personen.find((y) => y.id === cb.dataset.id && !y.del);
     if (x) ziele.push(x);
   });
-  let n = 0, belegt = 0;
+  let n = 0, belegt = 0, nichtDa = 0;
   const personen = new Set();
+  const erst = new Map(ziele.map((x) => [x.id, ersterTag(x)]));   // vor dem Kopieren merken
   ziele.forEach((x) => {
     const tage = (x.monate[k] || (x.monate[k] = { tage: {} })).tage;
     for (let d = kopieTag; d <= bis; d++) {
       if (x === p && d === kopieTag) continue;                          // Ausgangstag selbst
       if (d > kopieTag && ohneWe && frei(cur.y, cur.m, d)) continue;
       if (d > kopieTag && kopierbar(tage[d])) { belegt++; continue; }   // Folgetage: Vorhandenes nie überschreiben
+      const dk = datumKey(cur.y, cur.m, d);                             // Folgetage: Abgemeldete / noch nicht Dabeigewesene auslassen
+      if (d > kopieTag && x !== p && (abgemeldet(x, dk) || (erst.get(x.id) && dk < erst.get(x.id)))) { nichtDa++; continue; }
       tage[d] = muster();
       n++;
       personen.add(x.id);
     }
   });
   $('kopie').hidden = true;
-  if (!n) { toast(belegt ? 'Alle gewählten Tage sind schon belegt' : 'Nichts ausgewählt'); return; }
+  if (!n) { toast(belegt ? 'Alle gewählten Tage sind schon belegt' : nichtDa ? 'Nichts übertragen – an diesen Tagen ist niemand dabei' : 'Nichts ausgewählt'); return; }
   save();
   render();
   toast(`${n} ${n === 1 ? 'Eintrag' : 'Einträge'} für ${personen.size} ${personen.size === 1 ? 'Person' : 'Personen'} übertragen` +
-    (belegt ? ` (${belegt} schon ${belegt === 1 ? 'belegter Tag' : 'belegte Tage'} übersprungen)` : ''));
+    (belegt ? ` (${belegt} schon ${belegt === 1 ? 'belegter Tag' : 'belegte Tage'} übersprungen)` : '') +
+    (nichtDa ? ` (${nichtDa} ${nichtDa === 1 ? 'Tag' : 'Tage'} ausgelassen: abgemeldet/noch nicht dabei)` : ''));
 }
 
 // ---------- Dialog (Name eingeben) ----------
@@ -553,12 +633,12 @@ function dialogOk() {
 
 window.onAndroidBack = function () {
   if (!$('vorschau').hidden) { schliesseVorschau(); return true; }
-  for (const id of ['kopie', 'dialog', 'settings']) if (!$(id).hidden) { $(id).hidden = true; return true; }
+  for (const id of ['kopie', 'dialog', 'abmelden', 'settings']) if (!$(id).hidden) { $(id).hidden = true; return true; }
   if (ansicht.name !== 'firmen') { zurueck(); return true; }
   return false;
 };
 // Gibt es etwas, wohin die Zurück-Taste gehen kann? (gleiche Reihenfolge wie oben, ohne etwas zu tun)
-const zurueckMoeglich = () => !$('vorschau').hidden || ['kopie', 'dialog', 'settings'].some((id) => !$(id).hidden) || ansicht.name !== 'firmen';
+const zurueckMoeglich = () => !$('vorschau').hidden || ['kopie', 'dialog', 'abmelden', 'settings'].some((id) => !$(id).hidden) || ansicht.name !== 'firmen';
 
 function toast(msg) {
   const t = $('toast');
@@ -1055,6 +1135,7 @@ function mergePerson(a, b) {
   const n = neuer(a, b), out = { id: a.id, name: n.name, t: n.t || 0, monate: {} };
   if (n.del) { out.del = true; return out; }
   if (n.archivAb) out.archivAb = n.archivAb;
+  if (n.abAb) out.abAb = n.abAb;
   Object.keys(Object.assign({}, a.monate, b.monate)).forEach((k) => {
     out.monate[k] = { tage: mergeTage((a.monate[k] || {}).tage || {}, (b.monate[k] || {}).tage || {}) };
   });
@@ -1275,6 +1356,8 @@ window.onAppResume = () => planeSync(300);
 // ---------- Ereignisse ----------
 function init() {
   $('logo').src = window.LOGO_BREIT || '';   // Jansen-Logo im Kopf
+  $('abmOk').onclick = () => abmeldenOk(false);
+  $('abmZurueck').onclick = () => abmeldenOk(true);
   if (window.Bewegung) Bewegung.zurueckTaste(zurueckMoeglich, () => window.onAndroidBack());   // Android-Zurück: Schritt für Schritt
   stempeln(data.firmen);
   // Monatswechsel: Inhalt kommt aus der Pfeilrichtung

@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Fremdfirmen">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="13">
+<meta name="app-version" content="14">
 <style>
   /* Farben wie die Jansen-PC-Programme (Stillstandsplaner, Montagefortschritt, Aufmaßliste) */
   :root {
@@ -132,7 +132,14 @@
   .sheet label.wahl input { width: 22px; height: 22px; margin: 0; padding: 0; flex: none; accent-color: var(--accent); }
   .wahl small { display: block; font-size: 12px; color: #b26a00; }
   #kopieListe { margin-bottom: 10px; max-height: 45vh; overflow: auto; }
-  #kopie [hidden] { display: none !important; }
+  #kopie [hidden], #abmelden [hidden] { display: none !important; }
+  /* Abmelden ab Datum */
+  .tuer { flex: none; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 16px;
+    display: flex; align-items: center; justify-content: center; opacity: .55; padding: 0; }
+  .tuer.an { opacity: 1; border-color: #f2d27a; background: #fff7e0; }
+  .liste li.abgemeldet .name { color: var(--muted); }
+  .liste .bis { color: #b45309; font-weight: 600; }
+  .wahl.weg span { color: var(--muted); }
   #kopie label.tagebis { margin: 4px 0 6px; }
   .pdfbtn.hell { background: #fff; color: var(--accent); border: 1px solid var(--accent); box-shadow: none; }
   #tage .bem { flex: 1; font-size: 16px; }   /* unter 16px zoomt das iPhone beim Antippen ins Feld */
@@ -235,6 +242,20 @@
     <div class="btnrow">
       <button id="kopieAlle">Alle / Keine</button>
       <button class="primary" id="kopieOk">Übertragen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Person abmelden ab Datum -->
+<div class="backdrop" id="abmelden" hidden>
+  <div class="sheet">
+    <h2><span id="abmTitel"></span><button class="x" data-close aria-label="Schließen">×</button></h2>
+    <label>Nicht mehr dabei ab<input type="date" id="abmDatum"></label>
+    <p class="hint" id="abmHinweis" style="margin-top:0"></p>
+    <p class="hint">Ab diesem Tag wird die Person bei „Auf alle“ nicht mehr angehakt. Frühere Tage bleiben, wie sie sind. Ab dem nächsten Monat steht sie im Archiv.</p>
+    <div class="btnrow">
+      <button id="abmZurueck">Wieder dabei</button>
+      <button class="primary" id="abmOk">Abmelden</button>
     </div>
   </div>
 </div>
