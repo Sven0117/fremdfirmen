@@ -2,7 +2,7 @@
 
 // Seite (index.html) und Programm (app.js) müssen zusammenpassen. Nach einem Update kann der Browser kurz eine
 // alte Seite mit neuem Programm mischen – dann einmal neu laden. Bei jedem Update hier, in index.html und sw.js hochzählen.
-const APP_VERSION = '14';
+const APP_VERSION = '15';
 if (/^https?:$/.test(location.protocol)) {
   const seite = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (seite !== APP_VERSION && sessionStorage.getItem('neuGeladen') !== APP_VERSION) {
@@ -317,18 +317,61 @@ const firma = () => data.firmen.find((f) => f.id === ansicht.firma && !f.del);
 const person = () => { const f = firma(); return f && f.personen.find((p) => p.id === ansicht.person && !p.del); };
 
 // ---------- Ansichten ----------
-function summenKarte(titel, monat, gesamt) {
+function summenKarte(titel, monat, gesamt, vorOrtZeile) {
   return `<div class="card"><div class="summe"><span class="lbl">${esc(titel)}</span>` +
     `<span class="h">${fmtH(monat)}</span></div>` +
+    (vorOrtZeile ? `<div class="vorort">${vorOrtZeile}</div>` : '') +
     (gesamt != null ? `<div class="gesamt"><span>Gesamt alle Monate</span><span>${fmtH(gesamt)}</span></div>` : '') +
     `</div>`;
 }
+
+// ---- Was ist neu: erscheint einmal pro Gerät nach einem Update (lokal.neuGesehen = höchste gesehene Nummer) ----
+// Neue Einträge oben anfügen; n = fortlaufende Nummer (nicht die App-Version).
+const NEUIGKEITEN = [
+  { n: 2, titel: 'Neu in diesem Update', punkte: [
+    ['🚪', 'Leute abmelden ab Datum', 'Wird ein Monteur ausgetauscht: in der Firma beim Namen auf 🚪 tippen und den Tag wählen, ab dem er nicht mehr da ist. Bei „Auf alle“ wird er ab dann nicht mehr angehakt – neue Leute erst ab ihrem ersten Tag.'],
+    ['🟢', 'Aktuell vor Ort', 'Auf der Startseite und in jeder Firma steht jetzt, wie viele Leute heute vor Ort sind – abgemeldete zählen nicht mit.'],
+  ] },
+  { n: 1, titel: 'Außerdem seit Oktober', punkte: [
+    ['📍', 'Ort vom Vortag', 'Beim Eintragen der Stunden wird der Ort vom letzten Arbeitstag übernommen – überschreiben geht jederzeit.'],
+    ['👥', '„Auf alle“ für mehrere Tage', 'Einträge (auch nur „Urlaub“) lassen sich auf andere Personen und gleich bis zu einem Tag X übertragen.'],
+    ['☕', 'Pause pro Tag', 'In der Tageszeile die Pause wählen; samstags sind automatisch 15 min eingestellt.'],
+    ['📄', 'Stunden nach Ort', 'Die Anwesenheitsliste hat hinten ein Blatt mit den Stunden je Ort.'],
+    ['🗂️', 'Archiv statt Löschen', 'Firmen, die nicht mehr kommen, ab einem Monat ins Archiv – frühere Monate bleiben vollständig.'],
+  ] },
+];
+function zeigeNeuigkeiten(alle) {
+  const ab = alle ? 0 : (lokal.neuGesehen || 0);
+  const liste = NEUIGKEITEN.filter((x) => x.n > ab);
+  if (!liste.length) return false;
+  $('neuListe').innerHTML = liste.map((g) => `<div class="neukopf">${esc(g.titel)}</div>` + g.punkte.map(([ikon, t, text]) =>
+    `<div class="neupunkt"><div class="ikon">${ikon}</div><div><b>${esc(t)}</b><span>${esc(text)}</span></div></div>`).join('')).join('');
+  $('neu').hidden = false;
+  return true;
+}
+function neuGesehen() {
+  lokal.neuGesehen = Math.max(...NEUIGKEITEN.map((x) => x.n));
+  saveLokal();
+}
+
+// ---- Aktuell vor Ort (heute): nicht abgemeldet, nicht im Archiv, und schon dabei (erster Eintrag ≤ heute oder ganz neu) ----
+const heuteKey = () => { const d = new Date(); return datumKey(d.getFullYear(), d.getMonth(), d.getDate()); };
+const istAktuellerMonat = () => { const d = new Date(); return cur.y === d.getFullYear() && cur.m === d.getMonth(); };
+function vorOrt(f, p) {
+  const hk = heuteKey(), mk = hk.slice(0, 7);
+  if (f.del || p.del || imArchiv(f, mk) || imArchiv(p, mk) || abgemeldet(p, hk)) return false;
+  const erst = ersterTag(p);
+  return !erst || erst <= hk;
+}
+const vorOrtFirma = (f) => leute(f).filter((p) => vorOrt(f, p)).length;
+const mann = (n) => `${n} Mann`;
 
 function render() {
   const mText = `${MONATE[cur.m]} ${cur.y}`;
   $('monat').textContent = mText;
   $('zurueck').hidden = ansicht.name === 'firmen';
   $('settingsBtn').hidden = ansicht.name !== 'firmen';
+  $('infoBtn').hidden = ansicht.name !== 'firmen';
   $('logo').hidden = ansicht.name !== 'firmen';                     // Logo nur auf der Startseite, sonst Zurück + Name
   document.body.classList.toggle('start', ansicht.name === 'firmen');
   const main = $('main');
@@ -339,13 +382,19 @@ function render() {
     const alleFirmen = aktFirmen();
     const firmen = alleFirmen.filter((f) => sichtbarFirma(f, k)).sort(nachName);
     const archiv = alleFirmen.filter((f) => !sichtbarFirma(f, k)).sort(nachName);
-    let html = summenKarte(`Alle Firmen – ${mText}`, alleFirmen.reduce((a, f) => a + summeFirma(f, k), 0));
+    // „Aktuell vor Ort“ nur im laufenden Monat – es zählt der heutige Stand
+    const jetzt = istAktuellerMonat();
+    const vorOrtAlle = jetzt ? alleFirmen.reduce((a, f) => a + vorOrtFirma(f), 0) : 0;
+    const firmenVorOrt = jetzt ? alleFirmen.filter((f) => vorOrtFirma(f) > 0).length : 0;
+    let html = summenKarte(`Alle Firmen – ${mText}`, alleFirmen.reduce((a, f) => a + summeFirma(f, k), 0), null,
+      jetzt ? `<span class="punkt"></span>Aktuell vor Ort: <b>${mann(vorOrtAlle)}</b> <span class="leise">in ${firmenVorOrt} ${firmenVorOrt === 1 ? 'Firma' : 'Firmen'}</span>` : '');
     html += `<button class="pdfbtn" id="pdfAlle">Anwesenheitsliste (alle Firmen)</button>`;
     if (firmen.length) {
       html += '<div class="h2">Firmen</div>' + firmen.map((f) => {
-        const n = leuteMonat(f, k).length;
+        const n = leuteMonat(f, k).length, vo = jetzt ? vorOrtFirma(f) : null;
         return `<div class="card firma" data-firma="${f.id}"><div class="name">${esc(f.name)}</div>` +
-          `<div class="sub">${n} ${n === 1 ? 'Person' : 'Personen'}${imArchiv(f, k) ? ' · im Archiv' : ''}</div>` +
+          `<div class="sub">${n} ${n === 1 ? 'Person' : 'Personen'}${imArchiv(f, k) ? ' · im Archiv' : ''}` +
+          (vo != null ? ` · <span class="${vo ? 'vorortzahl' : 'leise'}">${vo ? `${vo} vor Ort` : 'niemand vor Ort'}</span>` : '') + `</div>` +
           `<div class="zahlen"><span>${MONATE[cur.m]}</span><b>${fmtH(summeFirma(f, k))}</b></div></div>`;
       }).join('');
     } else {
@@ -368,7 +417,9 @@ function render() {
 
   if (ansicht.name === 'firma') {
     $('titel').textContent = f.name;
-    let html = summenKarte(`${f.name} – ${mText}`, summeFirma(f, k), summeFirma(f, null));
+    const vo = istAktuellerMonat() ? vorOrtFirma(f) : null;
+    let html = summenKarte(`${f.name} – ${mText}`, summeFirma(f, k), summeFirma(f, null),
+      vo != null ? `<span class="punkt"></span>Aktuell vor Ort: <b>${mann(vo)}</b> <span class="leise">von ${leuteMonat(f, k).length} in der Liste</span>` : '');
     if (imArchiv(f, k)) html += `<p class="archivhinweis">Im Archiv seit ${monatText(f.archivAb)}.</p>`;
     html += `<button class="pdfbtn" id="pdfListe">Anwesenheitsliste (wer, wann, wo)</button>` +
       `<button class="pdfbtn hell" id="pdfBtn">Monatsübersicht (Stunden)</button>`;
@@ -633,12 +684,12 @@ function dialogOk() {
 
 window.onAndroidBack = function () {
   if (!$('vorschau').hidden) { schliesseVorschau(); return true; }
-  for (const id of ['kopie', 'dialog', 'abmelden', 'settings']) if (!$(id).hidden) { $(id).hidden = true; return true; }
+  for (const id of ['neu', 'kopie', 'dialog', 'abmelden', 'settings']) if (!$(id).hidden) { $(id).hidden = true; return true; }
   if (ansicht.name !== 'firmen') { zurueck(); return true; }
   return false;
 };
 // Gibt es etwas, wohin die Zurück-Taste gehen kann? (gleiche Reihenfolge wie oben, ohne etwas zu tun)
-const zurueckMoeglich = () => !$('vorschau').hidden || ['kopie', 'dialog', 'abmelden', 'settings'].some((id) => !$(id).hidden) || ansicht.name !== 'firmen';
+const zurueckMoeglich = () => !$('vorschau').hidden || ['neu', 'kopie', 'dialog', 'abmelden', 'settings'].some((id) => !$(id).hidden) || ansicht.name !== 'firmen';
 
 function toast(msg) {
   const t = $('toast');
@@ -1358,6 +1409,9 @@ function init() {
   $('logo').src = window.LOGO_BREIT || '';   // Jansen-Logo im Kopf
   $('abmOk').onclick = () => abmeldenOk(false);
   $('abmZurueck').onclick = () => abmeldenOk(true);
+  $('neuOk').onclick = () => { $('neu').hidden = true; };
+  $('infoBtn').onclick = () => zeigeNeuigkeiten(true);
+  $('neuZeigen').onclick = () => { $('settings').hidden = true; setTimeout(() => zeigeNeuigkeiten(true), 250); };
   if (window.Bewegung) Bewegung.zurueckTaste(zurueckMoeglich, () => window.onAndroidBack());   // Android-Zurück: Schritt für Schritt
   stempeln(data.firmen);
   // Monatswechsel: Inhalt kommt aus der Pfeilrichtung
@@ -1403,6 +1457,9 @@ function init() {
   $('restoreBtn').onclick = () => $('restoreFile').click();
   $('restoreFile').onchange = (e) => { if (e.target.files[0]) backupLaden(e.target.files[0]); e.target.value = ''; };
   render();
+  // Einmal nach einem Update zeigen, was neu ist – nur wer die App schon benutzt (neue Geräte bekommen es nicht)
+  if (!aktFirmen().length) neuGesehen();
+  else setTimeout(() => { if (zeigeNeuigkeiten(false)) neuGesehen(); }, 600);
 }
 
 init();

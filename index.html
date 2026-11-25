@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Fremdfirmen">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="14">
+<meta name="app-version" content="15">
 <style>
   /* Farben wie die Jansen-PC-Programme (Stillstandsplaner, Montagefortschritt, Aufmaßliste) */
   :root {
@@ -140,6 +140,22 @@
   .liste li.abgemeldet .name { color: var(--muted); }
   .liste .bis { color: #b45309; font-weight: 600; }
   .wahl.weg span { color: var(--muted); }
+  /* Was ist neu */
+  .knopf.info svg { display: block; }   /* Umriss-„i“ im gleichen Stil wie das Zahnrad */
+  .neupunkt { display: flex; gap: 12px; padding: 11px 2px; border-top: 1px solid var(--line2); }
+  .neupunkt:first-child { border-top: 0; }
+  .neupunkt .ikon { flex: none; width: 38px; height: 38px; border-radius: 10px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; font-size: 19px; }
+  .neupunkt b { display: block; color: var(--head); font-size: 15px; }
+  .neupunkt span { font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+  .neukopf { font-size: 12px; font-weight: 700; color: var(--accent-d); text-transform: uppercase; letter-spacing: .05em; margin: 12px 2px 2px; }
+  .neukopf:first-child { margin-top: 0; }
+  /* Aktuell vor Ort */
+  .vorort { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line2); font-size: 14px; color: var(--text); }
+  .vorort b { color: var(--ok); }
+  .punkt { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: 1px; }
+  .vorortzahl { color: var(--muted); font-weight: 400; }   /* in den Firmenkarten dezent wie „1 Person“ */
+  .vorortzahl .punkt { background: var(--muted); width: 6px; height: 6px; margin-right: 4px; }
+  .leise { color: var(--muted); font-weight: 400; }
   #kopie label.tagebis { margin: 4px 0 6px; }
   .pdfbtn.hell { background: #fff; color: var(--accent); border: 1px solid var(--accent); box-shadow: none; }
   #tage .bem { flex: 1; font-size: 16px; }   /* unter 16px zoomt das iPhone beim Antippen ins Feld */
@@ -208,6 +224,7 @@
     <img class="jlogo" id="logo" alt="Jansen">
     <div id="titel"></div>
     <button class="sync" id="syncBtn" aria-label="Dropbox-Abgleich" hidden></button>
+    <button class="knopf info" id="infoBtn" aria-label="Was ist neu?" title="Was ist neu?"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="7.6" r="1.25" fill="currentColor"/><path d="M12 10.8v6.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
     <button class="knopf" id="settingsBtn" aria-label="Einstellungen">⚙</button>
   </div>
   <div class="mrow">
@@ -243,6 +260,15 @@
       <button id="kopieAlle">Alle / Keine</button>
       <button class="primary" id="kopieOk">Übertragen</button>
     </div>
+  </div>
+</div>
+
+<!-- Was ist neu (einmal nach einem Update) -->
+<div class="backdrop" id="neu" hidden>
+  <div class="sheet">
+    <h2>Was ist neu?<button class="x" data-close aria-label="Schließen">×</button></h2>
+    <div id="neuListe"></div>
+    <div class="btnrow"><button class="primary" id="neuOk">Alles klar</button></div>
   </div>
 </div>
 
@@ -288,6 +314,9 @@
       <p id="dbxStatus" style="margin:0 0 8px"></p>
       <div class="btnrow"><button id="dbxJetzt">Jetzt abgleichen</button><button id="dbxTrennen">Trennen</button></div>
     </div>
+
+    <h3>Neuigkeiten</h3>
+    <div class="btnrow"><button id="neuZeigen">Was ist neu?</button></div>
 
     <h3>Backup</h3>
     <div class="btnrow">
